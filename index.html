@@ -114,7 +114,7 @@ const SUPABASE_KEY='sb_publishable_WP5FED21_Cw4ZaZQEpYqxA_I1GsrO3Z';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 // ---- Passcode gate (change PASSCODE to whatever you like) ----
-const PASSCODE='Gym2026';
+const PASSCODE='1337';
 function gate(){
   return new Promise(res=>{
     if(localStorage.getItem('wt_ok')==='1'){res();return}
