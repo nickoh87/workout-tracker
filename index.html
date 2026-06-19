@@ -113,6 +113,28 @@ const SUPABASE_URL='https://xemdbsatlbggaszpoivq.supabase.co';
 const SUPABASE_KEY='sb_publishable_WP5FED21_Cw4ZaZQEpYqxA_I1GsrO3Z';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
+// ---- Passcode gate (change PASSCODE to whatever you like) ----
+const PASSCODE='Gym2026';
+function gate(){
+  return new Promise(res=>{
+    if(localStorage.getItem('wt_ok')==='1'){res();return}
+    app.innerHTML=`<div class="page" style="min-height:88vh;display:flex;flex-direction:column;justify-content:center">
+      <div class="card" style="text-align:center;padding:28px 20px">
+        <div style="font-size:44px;margin-bottom:6px">🏋️</div>
+        <div style="font-size:19px;font-weight:750;margin-bottom:16px">Nick's Workout Tracker</div>
+        <input id="pc" type="password" inputmode="text" placeholder="Passcode" style="text-align:center;margin-bottom:12px">
+        <button class="btn" id="pcgo">Unlock</button>
+        <div id="pcerr" style="margin-top:10px;font-size:13px;color:var(--bad);min-height:16px"></div>
+      </div></div>`;
+    const go=()=>{const v=document.querySelector('#pc').value;
+      if(v===PASSCODE){localStorage.setItem('wt_ok','1');res()}
+      else{document.querySelector('#pcerr').textContent='Incorrect passcode';document.querySelector('#pc').value=''}};
+    document.querySelector('#pcgo').onclick=go;
+    document.querySelector('#pc').onkeydown=e=>{if(e.key==='Enter')go()};
+    document.querySelector('#pc').focus();
+  });
+}
+
 const $=s=>document.querySelector(s);
 const app=$('#app');
 const fmt=n=>n==null?'':(Math.round(n*10)/10).toString();
@@ -162,7 +184,8 @@ async function renderToday(){
   let wNow=null,wPrev=null,wDelta=null;
   if(weighs&&weighs.length){wNow=weighs[0].weight;const old=weighs.find(x=>x.date<=new Date(Date.now()-14*864e5).toLocaleDateString('en-CA'))||weighs[weighs.length-1];wPrev=old.weight;wDelta=wNow-wPrev}
   const dirCls=d=>d==null?'flat':d<0?'up':d>0?'down':'flat';
-  app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div></header>
+  app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div>
+    <button class="btn ghost sm" onclick="lock()" title="Lock">🔒</button></header>
   <div class="page">
     <button class="btn" onclick="setTab('log')" style="margin-bottom:16px">+ Start a workout</button>
     <div class="grid2">
@@ -433,7 +456,9 @@ function chartOpts(){return{responsive:true,maintainAspectRatio:false,
   scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6,maxRotation:0}},
     y:{grid:{color:'#1c2438'},ticks:{maxTicksLimit:5}}}}}
 
+function lock(){localStorage.removeItem('wt_ok');location.reload()}
 (async function init(){
+  await gate();
   try{await loadCore()}catch(e){app.innerHTML=`<div class="page"><div class="card">Couldn’t connect to the database.<br><span class="muted">${e.message}</span></div></div>`;return}
   $('#nav').classList.remove('hide');
   document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
