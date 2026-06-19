@@ -218,6 +218,7 @@ async function renderLog(){
   if(SESSION){return renderActiveSession()}
   app.innerHTML=`<header><div><h1>Log workout</h1><div class="sub">Pick a routine or start blank</div></div></header>
   <div class="page">
+    <button class="btn" onclick="newRoutine()" style="margin-bottom:14px">+ Create new workout</button>
     <div class="card"><h2>Your routines</h2><div id="tpls"></div></div>
     <button class="btn sec" onclick="startSession(null)">Start blank workout</button>
   </div>`;
@@ -228,6 +229,53 @@ async function renderLog(){
   });
   if(!DB.templates.length)c.innerHTML='<div class="muted">No routines.</div>';
 }
+
+// ---- Build a new reusable routine from the full exercise catalog ----
+let NR_SEL=[];
+function newRoutine(){
+  NR_SEL=[];
+  const groups={};
+  DB.exercises.forEach(e=>{(groups[e.muscle_group]=groups[e.muscle_group]||[]).push(e)});
+  const order=['Chest','Back','Shoulders','Arms','Legs','Core','Cardio','Other'];
+  const gkeys=Object.keys(groups).sort((a,b)=>{const ia=order.indexOf(a),ib=order.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)});
+  let cat='';
+  gkeys.forEach(g=>{
+    cat+=`<div class="card"><h2>${g}</h2><div>`;
+    groups[g].sort((a,b)=>a.name.localeCompare(b.name)).forEach(e=>{
+      cat+=`<button class="chip" data-ex="${e.id}" onclick="toggleNR(${e.id},this)">${e.name}</button>`});
+    cat+=`</div></div>`;
+  });
+  app.innerHTML=`<header><div><h1>New workout</h1><div class="sub">Tap exercises to add</div></div>
+    <button class="btn ghost sm" onclick="renderLog()">Cancel</button></header>
+  <div class="page">
+    <div class="card"><label class="fld">Name (optional)</label><input id="rname" placeholder="My Workout"></div>
+    ${cat}
+    <div style="height:6px"></div>
+    <button class="btn" id="nrsave" onclick="saveRoutine()">Save & start workout (0)</button>
+  </div>`;
+}
+function toggleNR(id,btn){
+  const i=NR_SEL.indexOf(id);
+  if(i>=0){NR_SEL.splice(i,1);btn.classList.remove('on')}
+  else{NR_SEL.push(id);btn.classList.add('on')}
+  $('#nrsave').textContent=`Save & start workout (${NR_SEL.length})`;
+}
+async function saveRoutine(){
+  if(!NR_SEL.length){alert('Tap at least one exercise to add.');return}
+  let name=($('#rname').value||'').trim();
+  if(!name)name='My Workout '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  let base=name,n=2;
+  while(DB.templates.some(t=>t.name.toLowerCase()===name.toLowerCase())){name=base+' ('+(n++)+')'}
+  const {data:tpl,error}=await sb.from('wt_templates').insert({name,position:DB.templates.length}).select().single();
+  if(error){alert('Could not save: '+error.message);return}
+  const rows=NR_SEL.map((exId,i)=>({template_id:tpl.id,exercise_id:exId,position:i,target_sets:3,target_reps:8}));
+  const {error:e2}=await sb.from('wt_template_exercises').insert(rows);
+  if(e2){alert('Could not save exercises: '+e2.message);return}
+  await loadCore();
+  toast('Routine saved 💾');
+  startSession(DB.templates.find(t=>t.id===tpl.id));
+}
+
 async function startSession(t){
   SESSION={date:todayISO(),template_id:t?t.id:null,name:t?t.name:'Workout',items:[]};
   if(t){for(const e of t.exs){SESSION.items.push({exId:e.exercise_id,sets:[]})}}
