@@ -149,12 +149,12 @@ async function renderToday(){
     <div class="page"><div class="spin"></div></div>`;
   const sinceW=new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   const since30=new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
-  const [{data:wks},{data:wmeta},{data:weighs}]=await Promise.all([
+  const [{data:wks},{data:wmeta},{data:weighs},{count:total}]=await Promise.all([
     sb.from('wt_workouts').select('id,date,name').order('date',{ascending:false}).limit(60),
     sb.from('wt_sets').select('weight,reps,wt_workouts!inner(date)').gte('wt_workouts.date',since30),
-    sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60)
+    sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60),
+    sb.from('wt_workouts').select('*',{count:'exact',head:true})
   ]);
-  const total=wks?wks.length:0;
   const weekCount=(wks||[]).filter(w=>w.date>=sinceW).length;
   const last=wks&&wks[0]?wks[0].date:null;
   const daysSince=last?Math.floor((new Date(todayISO())-new Date(last))/864e5):null;
