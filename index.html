@@ -528,24 +528,43 @@ async function progExercise(){
 async function progWeight(){
   const body=$('#pbody');
   const {data}=await sb.from('wt_weigh_ins').select('date,weight').order('date');
-  if(!data||!data.length){body.innerHTML='<div class="card muted center">No weigh-ins yet.</div>';return}
+  const addBtn=`<button class="btn" onclick="addWeigh()" style="margin-bottom:14px">+ Add weight</button>`;
+  if(!data||!data.length){body.innerHTML=addBtn+'<div class="card muted center">No weigh-ins yet. Tap “Add weight” to log one.</div>';return}
   const labels=data.map(d=>niceDate(d.date));const vals=data.map(d=>d.weight);
   const cur=vals[vals.length-1],start=vals[0],lo=Math.min(...vals),hi=Math.max(...vals);
-  body.innerHTML=`<div class="card"><div class="row sp" style="margin-bottom:10px">
+  body.innerHTML=addBtn+`<div class="card"><div class="row sp" style="margin-bottom:10px">
       <div><div style="font-size:30px;font-weight:750">${fmt(cur)}<span style="font-size:14px;color:var(--mut)"> lb</span></div><div class="muted" style="font-size:12px">current</div></div>
       <div class="center"><div style="font-size:18px;font-weight:700;color:${cur-start<=0?'var(--good)':'var(--bad)'}">${cur-start>0?'+':''}${fmt(cur-start)} lb</div><div class="muted" style="font-size:12px">total</div></div></div>
     <canvas id="cw" height="200"></canvas></div>
     <div class="grid2"><div class="stat"><div class="n">${fmt(lo)}</div><div class="l">Lowest</div></div>
-      <div class="stat"><div class="n">${fmt(hi)}</div><div class="l">Highest</div></div></div>
-    <div class="card"><button class="btn sec" onclick="addWeigh()">+ Log today's weight</button></div>`;
+      <div class="stat"><div class="n">${fmt(hi)}</div><div class="l">Highest</div></div></div>`;
   const grad=c=>{const g=c.createLinearGradient(0,0,0,200);g.addColorStop(0,'#ffb02e55');g.addColorStop(1,'#ffb02e00');return g};
   mkChart($('#cw'),{type:'line',data:{labels,datasets:[{label:'Weight (lb)',data:vals,borderColor:'#ffb02e',
     backgroundColor:c=>grad(c.chart.ctx),fill:true,tension:.3,pointRadius:0,borderWidth:2.5}]},options:chartOpts()});
 }
-async function addWeigh(){const v=prompt("Body weight today (lb)");if(!v)return;
-  const w=parseFloat(v);if(isNaN(w))return;
-  await sb.from('wt_weigh_ins').upsert({date:todayISO(),weight:w},{onConflict:'date'});
-  toast('Logged');progWeight()}
+function addWeigh(){
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet">
+    <div style="font-size:17px;font-weight:750;margin-bottom:14px">Add weight</div>
+    <label class="fld">Weight (lb)</label>
+    <input id="wv" inputmode="decimal" placeholder="e.g. 205" style="margin-bottom:12px">
+    <label class="fld">Date</label>
+    <input id="wd" type="date" value="${todayISO()}" max="${todayISO()}" style="margin-bottom:16px">
+    <button class="btn" id="wsave">Save</button>
+    <button class="btn ghost" id="wcancel" style="margin-top:8px">Cancel</button>
+    <div id="werr" style="color:var(--bad);font-size:13px;margin-top:8px;min-height:14px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const wv=ov.querySelector('#wv');setTimeout(()=>wv.focus(),50);
+  ov.querySelector('#wcancel').onclick=()=>ov.remove();
+  ov.querySelector('#wsave').onclick=async()=>{
+    const w=parseFloat(wv.value),d=ov.querySelector('#wd').value;
+    if(isNaN(w)||!d){ov.querySelector('#werr').textContent='Enter a weight and a date.';return}
+    const {error}=await sb.from('wt_weigh_ins').upsert({date:d,weight:w},{onConflict:'date'});
+    if(error){ov.querySelector('#werr').textContent=error.message;return}
+    ov.remove();toast('Weight logged');progWeight();
+  };
+}
 async function progCardio(){
   const body=$('#pbody');
   const {data}=await sb.from('wt_cardio').select('date,duration,distance,exercise_id').order('date');
