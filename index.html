@@ -6,6 +6,12 @@
 <meta name="theme-color" content="#0b0f17">
 <title>Nick's Workout Tracker</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Workouts">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
@@ -428,6 +434,7 @@ async function renderActive(wid){
         <span id="aprog" style="font-size:13px;font-weight:700"></span></div>
       <div class="pbar"><div id="abar"></div></div>
     </div>
+    <div class="card">${restChips()}</div>
     ${cards}
     <button class="btn" onclick="setTab('today')" style="margin-top:6px">Finish workout</button>
   </div>`;
@@ -449,20 +456,33 @@ async function toggleSet(id,el){
   if(error){el.classList.toggle('done',!now);el.querySelector('.ck').textContent=now?'':'✓';updateProgress();toast('Save failed')}
 }
 
-// ---- Rest timer (3 min) ----
+// ---- Rest timer (configurable) ----
 let REST={end:0,iv:null,ac:null};
-const REST_SECS=180;
+let restSecs=parseInt(localStorage.getItem('wt_rest'))||180;
+const REST_OPTS=[60,90,120,150,180,300];
+function restChips(){
+  return `<div class="rlbl" style="margin-bottom:8px">Rest length</div><div>`+
+    REST_OPTS.map(s=>`<button class="chip rchip ${s===restSecs?'on':''}" data-s="${s}" onclick="setRestLen(${s})">${fmtT(s)}</button>`).join('')+`</div>`;
+}
+function setRestLen(s){restSecs=s;localStorage.setItem('wt_rest',s);
+  document.querySelectorAll('.rchip').forEach(c=>c.classList.toggle('on',+c.dataset.s===s));}
 function ensureNotify(){try{if('Notification'in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}
 function fmtT(s){const m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0')}
 function beep(){try{REST.ac=REST.ac||new (window.AudioContext||window.webkitAudioContext)();const ac=REST.ac;
   [0,260,520].forEach(t=>{const o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=880;
     o.connect(g);g.connect(ac.destination);const s=ac.currentTime+t/1000;g.gain.setValueAtTime(.0001,s);
     g.gain.exponentialRampToValueAtTime(.4,s+.02);g.gain.exponentialRampToValueAtTime(.0001,s+.2);o.start(s);o.stop(s+.22)})}catch(e){}}
+// Screen wake lock keeps the screen on during rest so the timer reliably fires
+let wantWake=false,wakeLock=null;
+async function acquireWake(){wantWake=true;try{if('wakeLock'in navigator&&!wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null})}}catch(e){}}
+function releaseWake(){wantWake=false;try{if(wakeLock){wakeLock.release();wakeLock=null}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(wantWake&&document.visibilityState==='visible')acquireWake()});
 function startRest(){
   const bar=$('#rest');bar.classList.remove('hide','done');$('#rlbl').textContent='Rest';
-  REST.end=Date.now()+REST_SECS*1000;
+  REST.end=Date.now()+restSecs*1000;
   if(REST.iv)clearInterval(REST.iv);
   try{REST.ac=REST.ac||new (window.AudioContext||window.webkitAudioContext)();if(REST.ac.state==='suspended')REST.ac.resume()}catch(e){}
+  acquireWake();
   tickRest();REST.iv=setInterval(tickRest,250);
 }
 function tickRest(){
@@ -474,11 +494,12 @@ function restDone(){
   const bar=$('#rest');bar.classList.add('done');$('#rlbl').textContent='Rest done!';
   beep();try{navigator.vibrate&&navigator.vibrate([300,120,300])}catch(e){}
   try{if('Notification'in window&&Notification.permission==='granted')new Notification('Rest over 💪',{body:'Time for your next set',tag:'wt-rest'})}catch(e){}
+  releaseWake();
   setTimeout(()=>{if(!REST.iv)$('#rest').classList.add('hide')},10000);
 }
 function addRest(s){if($('#rest').classList.contains('hide'))return;REST.end=Math.max(Date.now(),REST.end)+s*1000;
   $('#rest').classList.remove('done');$('#rlbl').textContent='Rest';if(!REST.iv)REST.iv=setInterval(tickRest,250);tickRest()}
-function stopRest(){if(REST.iv)clearInterval(REST.iv);REST.iv=null;$('#rest').classList.add('hide')}
+function stopRest(){if(REST.iv)clearInterval(REST.iv);REST.iv=null;releaseWake();$('#rest').classList.add('hide')}
 
 async function renderHistory(){
   app.innerHTML=`<header><div><h1>History</h1><div class="sub">Every session</div></div></header><div class="page"><div class="spin"></div></div>`;
@@ -637,6 +658,7 @@ function chartOpts(){return{responsive:true,maintainAspectRatio:false,
     y:{grid:{color:'#1c2438'},ticks:{maxTicksLimit:5}}}}}
 
 function lock(){localStorage.removeItem('wt_ok');location.reload()}
+if('serviceWorker'in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 (async function init(){
   await gate();
   try{await loadCore()}catch(e){app.innerHTML=`<div class="page"><div class="card">Couldn’t connect to the database.<br><span class="muted">${e.message}</span></div></div>`;return}
