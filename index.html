@@ -340,7 +340,10 @@ function renderActiveSession(){
       ${it.sets[0]&&it.sets[0].last?`<div class="last">Last: ${fmt(it.sets[0].last.weight)} lb × ${fmt(it.sets[0].last.reps)} · ${niceDate(it.sets[0].last.date)}</div>`:''}
       <div class="setlbl"><span>Set</span><span>${ex&&ex.type==='cardio'?'Min':'Weight'}</span><span>${ex&&ex.type==='cardio'?'Dist/Lvl':'Reps'}</span><span></span></div>
       <div class="srows"></div>
-      <button class="btn ghost sm" onclick="addSet(${ii})" style="margin-top:4px">+ Add set</button>`;
+      <div class="row" style="margin-top:6px;gap:8px">
+        <button class="btn ghost sm" onclick="addSet(${ii})">+ Add set</button>
+        <button class="btn ghost sm" onclick="fillExercise(${ii})" style="color:var(--acc)">⚡ Fill all sets</button>
+      </div>`;
     const sr=card.querySelector('.srows');
     it.sets.forEach((s,si)=>{
       const row=document.createElement('div');row.className='setrow';
@@ -357,6 +360,11 @@ function renderActiveSession(){
 }
 function addSet(i){const it=SESSION.items[i];const prev=it.sets[it.sets.length-1]||{};
   it.sets.push({reps:prev.reps||'',weight:prev.weight||'',last:it.sets[0]?it.sets[0].last:null});renderActiveSession()}
+function fillExercise(i){const it=SESSION.items[i];
+  const src=it.sets.find(s=>s.weight!==''&&s.weight!=null||s.reps!==''&&s.reps!=null);
+  if(!src){toast('Enter set 1 first');return}
+  it.sets.forEach(s=>{s.weight=src.weight;s.reps=src.reps});
+  renderActiveSession();toast('Filled all sets')}
 function rmSet(i,s){SESSION.items[i].sets.splice(s,1);renderActiveSession()}
 function removeItem(i){SESSION.items.splice(i,1);renderActiveSession()}
 function cancelSession(){if(confirm('Discard this workout?')){SESSION=null;renderLog()}}
