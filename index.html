@@ -97,6 +97,19 @@
   .exopt{padding:13px 6px;border-bottom:1px solid var(--line);font-size:15px;display:flex;justify-content:space-between;align-items:center}
   .exopt .mg{font-size:11px;color:var(--mut)}
   .search{position:sticky;top:0;background:var(--bg2);padding-bottom:10px}
+  /* active workout */
+  .pbar{height:8px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:2px 0 4px}
+  .pbar>div{height:100%;background:var(--good);width:0;transition:width .25s}
+  .aset{display:flex;align-items:center;gap:12px;padding:13px 12px;border:1px solid var(--line);border-radius:12px;
+    margin-bottom:8px;background:var(--bg2);cursor:pointer;transition:.12s;user-select:none}
+  .aset:active{transform:scale(.99)}
+  .aset .ck{width:26px;height:26px;border-radius:50%;border:2px solid var(--mut2);flex:0 0 auto;display:flex;
+    align-items:center;justify-content:center;font-size:15px;color:#06231a;font-weight:800}
+  .aset .ainfo{font-size:16px;font-weight:600}
+  .aset .asn{margin-left:auto;font-size:12px;color:var(--mut)}
+  .aset.done{background:rgba(55,211,153,.1);border-color:rgba(55,211,153,.45)}
+  .aset.done .ck{background:var(--good);border-color:var(--good)}
+  .aset.done .ainfo{color:var(--mut);text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -204,10 +217,11 @@ async function renderToday(){
   const rc=$('#recent');
   if(!wks||!wks.length){rc.innerHTML='<div class="muted center">No workouts yet — tap “Start a workout”.</div>';return}
   for(const w of wks.slice(0,4)){
-    const {data:s}=await sb.from('wt_sets').select('exercise_id').eq('workout_id',w.id);
+    const {data:s}=await sb.from('wt_sets').select('exercise_id,completed').eq('workout_id',w.id);
     const names=[...new Set((s||[]).map(x=>exName(x.exercise_id)))];
+    const inprog=(s||[]).some(x=>!x.completed);
     const d=document.createElement('div');d.className='wk';d.style.cursor='pointer';d.onclick=()=>openWorkout(w.id);
-    d.innerHTML=`<div class="dt">${niceDate(w.date)}</div><div class="meta">${names.length} exercises · ${(s||[]).length} sets</div>
+    d.innerHTML=`<div class="dt">${niceDate(w.date)}${inprog?' <span style="color:var(--warn);font-size:12px;font-weight:700">• In progress</span>':''}</div><div class="meta">${names.length} exercises · ${(s||[]).length} sets</div>
       <div class="ex">${names.slice(0,6).map(n=>`<span class="pill">${n}</span>`).join('')}${names.length>6?'…':''}</div>`;
     rc.appendChild(d);
   }
@@ -365,7 +379,56 @@ async function saveSession(){
     })});
   if(rows.length)await sb.from('wt_sets').insert(rows);
   if(cardio.length)await sb.from('wt_cardio').insert(cardio);
-  SESSION=null;toast('Workout saved 💪');setTab('today');
+  SESSION=null;toast('Workout saved 💪');
+  if(rows.length)renderActive(wk.id); else setTab('today');
+}
+
+// ---- Active workout: tick off each set as you go (persisted) ----
+async function renderActive(wid){
+  app.innerHTML=`<header><div><h1>In progress</h1><div class="sub">Tap each set as you finish it</div></div>
+    <button class="btn ghost sm" onclick="setTab('today')">Finish</button></header><div class="page"><div class="spin"></div></div>`;
+  const [{data:w},{data:sets}]=await Promise.all([
+    sb.from('wt_workouts').select('*').eq('id',wid).single(),
+    sb.from('wt_sets').select('*').eq('workout_id',wid).order('exercise_id').order('set_number')
+  ]);
+  const byEx={};(sets||[]).forEach(s=>{(byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s)});
+  let cards='';
+  for(const exId in byEx){
+    cards+=`<div class="card"><div class="nm" style="font-weight:700;margin-bottom:10px">${exName(+exId)}</div>`;
+    byEx[exId].forEach(s=>{
+      cards+=`<div class="aset ${s.completed?'done':''}" onclick="toggleSet(${s.id},this)">
+        <div class="ck">${s.completed?'✓':''}</div>
+        <div class="ainfo">${fmt(s.weight)} lb × ${fmt(s.reps)}</div>
+        <div class="asn">Set ${s.set_number}</div></div>`;
+    });
+    cards+=`</div>`;
+  }
+  app.innerHTML=`<header><div><h1>${w.name||'Workout'}</h1><div class="sub">Tap each set as you finish it</div></div>
+    <button class="btn ghost sm" onclick="setTab('today')">Finish</button></header>
+  <div class="page">
+    <div class="card" style="position:sticky;top:64px;z-index:5">
+      <div class="row sp" style="margin-bottom:6px"><span class="muted" style="font-size:13px;font-weight:600">Progress</span>
+        <span id="aprog" style="font-size:13px;font-weight:700"></span></div>
+      <div class="pbar"><div id="abar"></div></div>
+    </div>
+    ${cards}
+    <button class="btn" onclick="setTab('today')" style="margin-top:6px">Finish workout</button>
+  </div>`;
+  updateProgress();
+}
+function updateProgress(){
+  const all=document.querySelectorAll('.aset'),done=document.querySelectorAll('.aset.done').length;
+  const p=$('#aprog'),b=$('#abar');
+  if(p)p.textContent=`${done} / ${all.length} sets`;
+  if(b)b.style.width=(all.length?done/all.length*100:0)+'%';
+}
+async function toggleSet(id,el){
+  const now=!el.classList.contains('done');
+  el.classList.toggle('done',now);
+  el.querySelector('.ck').textContent=now?'✓':'';
+  updateProgress();
+  const {error}=await sb.from('wt_sets').update({completed:now}).eq('id',id);
+  if(error){el.classList.toggle('done',!now);el.querySelector('.ck').textContent=now?'':'✓';updateProgress();toast('Save failed')}
 }
 
 async function renderHistory(){
@@ -390,8 +453,9 @@ async function renderHistory(){
   });
 }
 async function openWorkout(id){
-  const {data:w}=await sb.from('wt_workouts').select('*').eq('id',id).single();
   const {data:sets}=await sb.from('wt_sets').select('*').eq('workout_id',id).order('exercise_id').order('set_number');
+  if((sets||[]).some(s=>!s.completed)){return renderActive(id)}
+  const {data:w}=await sb.from('wt_workouts').select('*').eq('id',id).single();
   const {data:cardio}=await sb.from('wt_cardio').select('*').eq('workout_id',id);
   const byEx={};(sets||[]).forEach(s=>{(byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s)});
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
