@@ -110,6 +110,18 @@
   .aset.done{background:rgba(55,211,153,.1);border-color:rgba(55,211,153,.45)}
   .aset.done .ck{background:var(--good);border-color:var(--good)}
   .aset.done .ainfo{color:var(--mut);text-decoration:line-through}
+  /* rest timer */
+  .restbar{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;z-index:40;
+    width:calc(100% - 28px);max-width:572px;display:flex;align-items:center;gap:12px;
+    background:var(--card2);border:1px solid var(--acc2);border-radius:14px;padding:11px 14px;
+    box-shadow:0 14px 34px -12px #000;animation:up .2s ease}
+  .restbar.done{border-color:var(--good);background:rgba(55,211,153,.14)}
+  .restbar .rtime{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;min-width:60px}
+  .restbar.done .rtime{color:var(--good)}
+  .restbar .rlbl{font-size:11px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.6px}
+  .restbar .rsp{margin-left:auto;display:flex;gap:8px}
+  .restbar button{background:var(--bg2);border:1px solid var(--line);color:var(--txt);padding:8px 12px;
+    border-radius:10px;font-size:13px;font-weight:600}
 </style>
 </head>
 <body>
@@ -120,6 +132,11 @@
   <button data-tab="history"><svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>History</button>
   <button data-tab="progress"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>Progress</button>
 </nav>
+<div id="rest" class="restbar hide">
+  <div class="rtime" id="rtime">3:00</div>
+  <div class="rlbl" id="rlbl">Rest</div>
+  <div class="rsp"><button onclick="addRest(30)">+30s</button><button onclick="stopRest()">Skip</button></div>
+</div>
 
 <script>
 const SUPABASE_URL='https://xemdbsatlbggaszpoivq.supabase.co';
@@ -427,9 +444,41 @@ async function toggleSet(id,el){
   el.classList.toggle('done',now);
   el.querySelector('.ck').textContent=now?'✓':'';
   updateProgress();
+  if(now){ensureNotify();startRest();}
   const {error}=await sb.from('wt_sets').update({completed:now}).eq('id',id);
   if(error){el.classList.toggle('done',!now);el.querySelector('.ck').textContent=now?'':'✓';updateProgress();toast('Save failed')}
 }
+
+// ---- Rest timer (3 min) ----
+let REST={end:0,iv:null,ac:null};
+const REST_SECS=180;
+function ensureNotify(){try{if('Notification'in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}}
+function fmtT(s){const m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0')}
+function beep(){try{REST.ac=REST.ac||new (window.AudioContext||window.webkitAudioContext)();const ac=REST.ac;
+  [0,260,520].forEach(t=>{const o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=880;
+    o.connect(g);g.connect(ac.destination);const s=ac.currentTime+t/1000;g.gain.setValueAtTime(.0001,s);
+    g.gain.exponentialRampToValueAtTime(.4,s+.02);g.gain.exponentialRampToValueAtTime(.0001,s+.2);o.start(s);o.stop(s+.22)})}catch(e){}}
+function startRest(){
+  const bar=$('#rest');bar.classList.remove('hide','done');$('#rlbl').textContent='Rest';
+  REST.end=Date.now()+REST_SECS*1000;
+  if(REST.iv)clearInterval(REST.iv);
+  try{REST.ac=REST.ac||new (window.AudioContext||window.webkitAudioContext)();if(REST.ac.state==='suspended')REST.ac.resume()}catch(e){}
+  tickRest();REST.iv=setInterval(tickRest,250);
+}
+function tickRest(){
+  const left=Math.round((REST.end-Date.now())/1000);
+  if(left<=0){$('#rtime').textContent='0:00';clearInterval(REST.iv);REST.iv=null;restDone();return}
+  $('#rtime').textContent=fmtT(left);
+}
+function restDone(){
+  const bar=$('#rest');bar.classList.add('done');$('#rlbl').textContent='Rest done!';
+  beep();try{navigator.vibrate&&navigator.vibrate([300,120,300])}catch(e){}
+  try{if('Notification'in window&&Notification.permission==='granted')new Notification('Rest over 💪',{body:'Time for your next set',tag:'wt-rest'})}catch(e){}
+  setTimeout(()=>{if(!REST.iv)$('#rest').classList.add('hide')},10000);
+}
+function addRest(s){if($('#rest').classList.contains('hide'))return;REST.end=Math.max(Date.now(),REST.end)+s*1000;
+  $('#rest').classList.remove('done');$('#rlbl').textContent='Rest';if(!REST.iv)REST.iv=setInterval(tickRest,250);tickRest()}
+function stopRest(){if(REST.iv)clearInterval(REST.iv);REST.iv=null;$('#rest').classList.add('hide')}
 
 async function renderHistory(){
   app.innerHTML=`<header><div><h1>History</h1><div class="sub">Every session</div></div></header><div class="page"><div class="spin"></div></div>`;
