@@ -75,6 +75,11 @@
   .setlbl span{text-align:center}
   .last{font-size:11px;color:var(--mut2);margin-top:-2px;margin-bottom:8px;padding-left:42px}
   .wk{border-left:3px solid var(--acc2);padding:2px 0 2px 12px;margin-bottom:14px}
+  .wk.quick{border-left-color:var(--warn)}
+  .qrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:15px}
+  .qrow:last-child{border-bottom:none}
+  .qrow .qt{margin-left:auto;font-size:12px;color:var(--mut)}
+  .qrow .qx{background:none;color:var(--mut2);font-size:19px;padding:0 4px}
   .wk .dt{font-weight:700;font-size:15px}
   .wk .meta{color:var(--mut);font-size:12.5px;margin-top:2px}
   .wk .ex{color:var(--mut);font-size:13px;margin-top:6px;line-height:1.5}
@@ -208,13 +213,14 @@ async function renderToday(){
   const sinceW=new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   const since30=new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
   const [{data:wks},{data:wmeta},{data:weighs},{count:total}]=await Promise.all([
-    sb.from('wt_workouts').select('id,date,name').order('date',{ascending:false}).limit(60),
+    sb.from('wt_workouts').select('id,date,name,kind').order('date',{ascending:false}).order('id',{ascending:false}).limit(60),
     sb.from('wt_sets').select('weight,reps,wt_workouts!inner(date)').gte('wt_workouts.date',since30),
     sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60),
-    sb.from('wt_workouts').select('*',{count:'exact',head:true})
+    sb.from('wt_workouts').select('*',{count:'exact',head:true}).neq('kind','quick')
   ]);
-  const weekCount=(wks||[]).filter(w=>w.date>=sinceW).length;
-  const last=wks&&wks[0]?wks[0].date:null;
+  const real=(wks||[]).filter(w=>w.kind!=='quick');
+  const weekCount=real.filter(w=>w.date>=sinceW).length;
+  const last=real[0]?real[0].date:null;
   const daysSince=last?Math.floor((new Date(todayISO())-new Date(last))/864e5):null;
   let vol30=0;(wmeta||[]).forEach(s=>{vol30+=(s.weight||0)*(s.reps||0)});
   let wNow=null,wPrev=null,wDelta=null;
@@ -223,7 +229,8 @@ async function renderToday(){
   app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div>
     <button class="btn ghost sm" onclick="lock()" title="Lock">🔒</button></header>
   <div class="page">
-    <button class="btn" onclick="setTab('log')" style="margin-bottom:16px">+ Start a workout</button>
+    <button class="btn" onclick="setTab('log')" style="margin-bottom:10px">+ Start a workout</button>
+    <button class="btn sec" onclick="quickLog()" style="margin-bottom:16px">⚡ Quick log — just did something</button>
     <div class="grid2">
       <div class="stat"><div class="n">${weekCount}</div><div class="l">Workouts this week</div></div>
       <div class="stat"><div class="n">${daysSince==null?'–':daysSince===0?'Today':daysSince+'d'}</div><div class="l">Since last workout</div></div>
@@ -240,13 +247,129 @@ async function renderToday(){
   const rc=$('#recent');
   if(!wks||!wks.length){rc.innerHTML='<div class="muted center">No workouts yet — tap “Start a workout”.</div>';return}
   for(const w of wks.slice(0,4)){
-    const {data:s}=await sb.from('wt_sets').select('exercise_id,completed').eq('workout_id',w.id);
-    const names=[...new Set((s||[]).map(x=>exName(x.exercise_id)))];
-    const inprog=(s||[]).some(x=>!x.completed);
-    const d=document.createElement('div');d.className='wk';d.style.cursor='pointer';d.onclick=()=>openWorkout(w.id);
-    d.innerHTML=`<div class="dt">${niceDate(w.date)}${inprog?' <span style="color:var(--warn);font-size:12px;font-weight:700">• In progress</span>':''}</div><div class="meta">${names.length} exercises · ${(s||[]).length} sets</div>
-      <div class="ex">${names.slice(0,6).map(n=>`<span class="pill">${n}</span>`).join('')}${names.length>6?'…':''}</div>`;
+    const {data:s}=await sb.from('wt_sets').select('exercise_id,completed,reps,weight').eq('workout_id',w.id).order('set_number');
+    const d=document.createElement('div');d.className='wk'+(w.kind==='quick'?' quick':'');d.style.cursor='pointer';
+    d.onclick=()=>openWorkout(w.id);
+    if(w.kind==='quick'){
+      const {data:c}=await sb.from('wt_cardio').select('exercise_id,duration,distance').eq('workout_id',w.id);
+      const bits=(s||[]).map(x=>`${exName(x.exercise_id)} × ${fmt(x.reps)}${x.weight?' @ '+fmt(x.weight)+' lb':''}`)
+        .concat((c||[]).map(x=>`${exName(x.exercise_id)} · ${fmt(x.duration)} min`));
+      d.innerHTML=`<div class="dt">${niceDate(w.date)} <span style="color:var(--warn);font-size:12px;font-weight:700">⚡ Quick log</span></div>
+        <div class="meta">${bits.length} entr${bits.length===1?'y':'ies'}</div>
+        <div class="ex">${bits.slice(0,6).map(n=>`<span class="pill">${n}</span>`).join('')}${bits.length>6?'…':''}</div>`;
+    }else{
+      const names=[...new Set((s||[]).map(x=>exName(x.exercise_id)))];
+      const inprog=(s||[]).some(x=>!x.completed);
+      d.innerHTML=`<div class="dt">${niceDate(w.date)}${inprog?' <span style="color:var(--warn);font-size:12px;font-weight:700">• In progress</span>':''}</div><div class="meta">${names.length} exercises · ${(s||[]).length} sets</div>
+        <div class="ex">${names.slice(0,6).map(n=>`<span class="pill">${n}</span>`).join('')}${names.length>6?'…':''}</div>`;
+    }
     rc.appendChild(d);
+  }
+}
+
+// ---- Quick log: one-off entry, no workout needed ----
+function qRecent(){try{return JSON.parse(localStorage.getItem('wt_qrecent')||'[]')}catch(e){return[]}}
+function qRemember(id){const r=qRecent().filter(x=>x!==id);r.unshift(id);localStorage.setItem('wt_qrecent',JSON.stringify(r.slice(0,8)))}
+function quickLog(){
+  let sel=null;
+  const rec=qRecent().map(id=>exById(id)).filter(Boolean).slice(0,6);
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet">
+    <div style="font-size:17px;font-weight:750">⚡ Quick log</div>
+    <div class="muted" style="font-size:13px;margin:4px 0 14px">Something you just did — no workout needed.</div>
+    <div id="qpick">
+      ${rec.length?`<label class="fld">Recent</label><div style="margin-bottom:10px">${rec.map(e=>`<button class="chip qrc" data-ex="${e.id}">${e.name}</button>`).join('')}</div>`:''}
+      <label class="fld">Exercise</label>
+      <input id="qsearch" placeholder="Search…" autocomplete="off" style="margin-bottom:8px">
+      <div id="qlist" style="max-height:230px;overflow:auto"></div>
+    </div>
+    <div id="qform" class="hide">
+      <div class="row sp" style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px">
+        <div><div style="font-weight:700" id="qname"></div><div class="mg" id="qmg" style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px"></div></div>
+        <button class="btn ghost sm" id="qchg">Change</button>
+      </div>
+      <div class="row" style="gap:10px;margin-bottom:12px;align-items:flex-end">
+        <div style="flex:1"><label class="fld" id="ql1">Reps</label><input id="qreps" inputmode="decimal" placeholder="e.g. 10"></div>
+        <div style="flex:1"><label class="fld" id="ql2">Weight (optional)</label><input id="qw" inputmode="decimal" placeholder="–"></div>
+      </div>
+      <label class="fld">Date</label>
+      <input id="qdate" type="date" value="${todayISO()}" max="${todayISO()}" style="margin-bottom:16px">
+      <button class="btn" id="qsave">Log it</button>
+    </div>
+    <button class="btn ghost" id="qcancel" style="margin-top:8px">Cancel</button>
+    <div id="qerr" style="color:var(--bad);font-size:13px;margin-top:8px;min-height:14px"></div>
+  </div>`;
+  document.body.appendChild(ov);
+  const q=s=>ov.querySelector(s);
+  const list=q('#qlist');
+  function draw(txt=''){
+    const t=txt.trim().toLowerCase();
+    const hits=DB.exercises.filter(e=>e.name.toLowerCase().includes(t));
+    list.innerHTML='';
+    if(t&&!DB.exercises.some(e=>e.name.toLowerCase()===t)){
+      const d=document.createElement('div');d.className='exopt';
+      d.innerHTML=`<span style="color:var(--acc)">+ Create “${txt.trim()}”</span>`;
+      d.onclick=()=>createEx(txt.trim());list.appendChild(d);
+    }
+    hits.forEach(e=>{
+      const d=document.createElement('div');d.className='exopt';
+      d.innerHTML=`<span>${e.name}</span><span class="mg">${e.muscle_group||''}</span>`;
+      d.onclick=()=>choose(e);list.appendChild(d);
+    });
+  }
+  async function createEx(name){
+    const mg=prompt('Muscle group (e.g. Chest, Back, Legs, Arms, Shoulders, Core)','Other')||'Other';
+    const {data,error}=await sb.from('wt_exercises').insert({name,type:'strength',muscle_group:mg}).select().single();
+    if(error){q('#qerr').textContent=error.message;return}
+    DB.exercises.push(data);DB.exercises.sort((a,b)=>a.name.localeCompare(b.name));choose(data);
+  }
+  function choose(e){
+    sel=e;
+    q('#qpick').classList.add('hide');q('#qform').classList.remove('hide');
+    q('#qname').textContent=e.name;q('#qmg').textContent=e.muscle_group||'';
+    const cardio=e.type==='cardio';
+    q('#ql1').textContent=cardio?'Minutes':'Reps';
+    q('#ql2').textContent=cardio?'Dist / Level (optional)':'Weight (optional)';
+    q('#qreps').placeholder=cardio?'e.g. 20':'e.g. 10';
+    setTimeout(()=>q('#qreps').focus(),60);
+  }
+  draw();
+  ov.querySelectorAll('.qrc').forEach(b=>b.onclick=()=>{const e=exById(+b.dataset.ex);if(e)choose(e)});
+  q('#qsearch').oninput=e=>draw(e.target.value);
+  q('#qchg').onclick=()=>{sel=null;q('#qform').classList.add('hide');q('#qpick').classList.remove('hide')};
+  q('#qcancel').onclick=()=>ov.remove();
+  q('#qsave').onclick=async()=>{
+    const err=q('#qerr');err.textContent='';
+    const a=parseFloat(q('#qreps').value),bRaw=q('#qw').value.trim();
+    const b=bRaw===''?null:parseFloat(bRaw);
+    const date=q('#qdate').value;
+    if(!sel||isNaN(a)||!date){err.textContent='Pick an exercise and enter a number.';return}
+    q('#qsave').textContent='Saving…';
+    try{
+      await saveQuick(sel,a,b,date);
+      qRemember(sel.id);
+      ov.remove();toast('Logged ⚡');
+      if(TAB==='today')renderToday();else if(TAB==='history')renderHistory();
+    }catch(e){q('#qsave').textContent='Log it';err.textContent=e.message||'Save failed'}
+  };
+}
+async function saveQuick(ex,a,b,date){
+  let {data:found,error:e0}=await sb.from('wt_workouts').select('id').eq('date',date).eq('kind','quick').limit(1);
+  if(e0)throw e0;
+  let wid;
+  if(found&&found.length)wid=found[0].id;
+  else{
+    const {data:nw,error:e1}=await sb.from('wt_workouts').insert({date,name:'Quick log',kind:'quick'}).select().single();
+    if(e1)throw e1;wid=nw.id;
+  }
+  if(ex.type==='cardio'){
+    const {error}=await sb.from('wt_cardio').insert({workout_id:wid,date,exercise_id:ex.id,duration:a,distance:b});
+    if(error)throw error;
+  }else{
+    const {data:lastS}=await sb.from('wt_sets').select('set_number').eq('workout_id',wid).order('set_number',{ascending:false}).limit(1);
+    const n=(lastS&&lastS[0]?lastS[0].set_number:0)+1;
+    const {error}=await sb.from('wt_sets').insert({workout_id:wid,exercise_id:ex.id,set_number:n,reps:a,weight:b,completed:true});
+    if(error)throw error;
   }
 }
 
@@ -257,7 +380,8 @@ async function renderLog(){
   <div class="page">
     <button class="btn" onclick="newRoutine()" style="margin-bottom:14px">+ Create new workout</button>
     <div class="card"><h2>Your routines</h2><div id="tpls"></div></div>
-    <button class="btn sec" onclick="startSession(null)">Start blank workout</button>
+    <button class="btn sec" onclick="startSession(null)" style="margin-bottom:10px">Start blank workout</button>
+    <button class="btn sec" onclick="quickLog()">⚡ Quick log a single thing</button>
   </div>`;
   const c=$('#tpls');
   DB.templates.forEach(t=>{
@@ -511,7 +635,7 @@ function stopRest(){if(REST.iv)clearInterval(REST.iv);REST.iv=null;releaseWake()
 
 async function renderHistory(){
   app.innerHTML=`<header><div><h1>History</h1><div class="sub">Every session</div></div></header><div class="page"><div class="spin"></div></div>`;
-  const {data:wks}=await sb.from('wt_workouts').select('id,date,name').order('date',{ascending:false});
+  const {data:wks}=await sb.from('wt_workouts').select('id,date,name,kind').order('date',{ascending:false}).order('id',{ascending:false});
   const pg=$('.page');pg.innerHTML='';
   if(!wks||!wks.length){pg.innerHTML='<div class="muted center">No workouts yet.</div>';return}
   const {data:allsets}=await sb.from('wt_sets').select('workout_id,exercise_id,reps,weight');
@@ -521,19 +645,30 @@ async function renderHistory(){
     const mk=w.date.slice(0,7);
     if(mk!==curM){curM=mk;const h=document.createElement('h2');h.style.cssText='margin:18px 0 10px;color:var(--mut)';
       h.textContent=new Date(w.date+'T00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});pg.appendChild(h)}
-    const s=byW[w.id]||[];const names=[...new Set(s.map(x=>exName(x.exercise_id)))];
+    const s=byW[w.id]||[];
     const vol=s.reduce((a,x)=>a+(x.weight||0)*(x.reps||0),0);
     const card=document.createElement('div');card.className='card';card.style.cursor='pointer';card.onclick=()=>openWorkout(w.id);
-    card.innerHTML=`<div class="row sp"><div class="dt" style="font-weight:700">${niceDate(w.date)}</div>
-      <div class="muted" style="font-size:12px">${s.length} sets · ${Math.round(vol).toLocaleString()} lb</div></div>
-      <div class="ex" style="margin-top:8px">${names.map(n=>`<span class="pill">${n}</span>`).join('')}</div>`;
+    if(w.kind==='quick'){
+      const bits=s.map(x=>`${exName(x.exercise_id)} × ${fmt(x.reps)}${x.weight?' @ '+fmt(x.weight)+' lb':''}`);
+      card.style.borderColor='#3a3320';
+      card.innerHTML=`<div class="row sp"><div class="dt" style="font-weight:700">${niceDate(w.date)} <span style="color:var(--warn);font-size:12px">⚡ Quick log</span></div>
+        <div class="muted" style="font-size:12px">${bits.length} entr${bits.length===1?'y':'ies'}</div></div>
+        <div class="ex" style="margin-top:8px">${bits.map(n=>`<span class="pill">${n}</span>`).join('')}</div>`;
+    }else{
+      const names=[...new Set(s.map(x=>exName(x.exercise_id)))];
+      card.innerHTML=`<div class="row sp"><div class="dt" style="font-weight:700">${niceDate(w.date)}</div>
+        <div class="muted" style="font-size:12px">${s.length} sets · ${Math.round(vol).toLocaleString()} lb</div></div>
+        <div class="ex" style="margin-top:8px">${names.map(n=>`<span class="pill">${n}</span>`).join('')}</div>`;
+    }
     pg.appendChild(card);
   });
 }
 async function openWorkout(id){
+  const {data:w0}=await sb.from('wt_workouts').select('*').eq('id',id).single();
+  if(w0&&w0.kind==='quick')return openQuickDay(w0);
   const {data:sets}=await sb.from('wt_sets').select('*').eq('workout_id',id).order('exercise_id').order('set_number');
   if((sets||[]).some(s=>!s.completed)){return renderActive(id)}
-  const {data:w}=await sb.from('wt_workouts').select('*').eq('id',id).single();
+  const w=w0;
   const {data:cardio}=await sb.from('wt_cardio').select('*').eq('workout_id',id);
   const byEx={};(sets||[]).forEach(s=>{(byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s)});
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
@@ -548,6 +683,41 @@ async function openWorkout(id){
   (cardio||[]).forEach(c=>{body+=`<div class="card" style="margin-bottom:10px"><div class="nm" style="font-weight:700">${exName(c.exercise_id)}</div>
     <div class="muted" style="font-size:14px;margin-top:4px">${fmt(c.duration)} min · ${fmt(c.distance)}</div></div>`});
   ov.innerHTML=`<div class="sheet">${body}</div>`;document.body.appendChild(ov);
+}
+async function openQuickDay(w){
+  const [{data:sets},{data:cardio}]=await Promise.all([
+    sb.from('wt_sets').select('*').eq('workout_id',w.id).order('set_number'),
+    sb.from('wt_cardio').select('*').eq('workout_id',w.id).order('id')
+  ]);
+  const tm=t=>{try{return new Date(t).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}catch(e){return''}};
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  let rows=(sets||[]).map(s=>`<div class="qrow"><span>${exName(s.exercise_id)}</span>
+      <span style="font-weight:700">× ${fmt(s.reps)}${s.weight?` <span class="muted" style="font-weight:400">@ ${fmt(s.weight)} lb</span>`:''}</span>
+      <span class="qt">${tm(s.created_at)}</span>
+      <button class="qx" onclick="delQuickEntry('set',${s.id},${w.id})">×</button></div>`).join('');
+  rows+=(cardio||[]).map(c=>`<div class="qrow"><span>${exName(c.exercise_id)}</span>
+      <span style="font-weight:700">${fmt(c.duration)} min${c.distance?` <span class="muted" style="font-weight:400">· ${fmt(c.distance)}</span>`:''}</span>
+      <span class="qt">${tm(c.created_at)}</span>
+      <button class="qx" onclick="delQuickEntry('cardio',${c.id},${w.id})">×</button></div>`).join('');
+  ov.innerHTML=`<div class="sheet">
+    <div class="row sp" style="margin-bottom:14px">
+      <div><div style="font-size:18px;font-weight:750">${niceDate(w.date)}</div>
+        <div style="font-size:13px;color:var(--warn);font-weight:600">⚡ Quick log</div></div>
+      <button class="btn danger sm" onclick="delWorkout(${w.id})">Delete all</button></div>
+    <div class="card">${rows||'<div class="muted center">Nothing here.</div>'}</div>
+    <button class="btn sec" onclick="document.querySelector('.ovr').remove();quickLog()">⚡ Add another</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+async function delQuickEntry(kind,id,wid){
+  await sb.from(kind==='cardio'?'wt_cardio':'wt_sets').delete().eq('id',id);
+  const [{count:cs},{count:cc}]=await Promise.all([
+    sb.from('wt_sets').select('*',{count:'exact',head:true}).eq('workout_id',wid),
+    sb.from('wt_cardio').select('*',{count:'exact',head:true}).eq('workout_id',wid)
+  ]);
+  if(!cs&&!cc)await sb.from('wt_workouts').delete().eq('id',wid);
+  document.querySelector('.ovr')?.remove();toast('Removed');
+  if(TAB==='history')renderHistory();else renderToday();
 }
 async function delWorkout(id){if(!confirm('Delete this whole workout?'))return;
   await sb.from('wt_cardio').delete().eq('workout_id',id);
