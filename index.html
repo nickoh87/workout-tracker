@@ -133,6 +133,40 @@
   .restbar .rsp{margin-left:auto;display:flex;gap:8px}
   .restbar button{background:var(--bg2);border:1px solid var(--line);color:var(--txt);padding:8px 12px;
     border-radius:10px;font-size:13px;font-weight:600}
+  /* meals */
+  .daynav{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .daynav button{background:var(--card2);border:1px solid var(--line);color:var(--txt);width:40px;height:40px;border-radius:12px;font-size:18px}
+  .daynav .dn{flex:1;text-align:center;font-weight:700;font-size:15px}
+  .daynav .dn small{display:block;color:var(--mut);font-weight:500;font-size:12px}
+  .wkstrip{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:14px}
+  .wkstrip button{background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:7px 0;font-size:11px;font-weight:600;line-height:1.3}
+  .wkstrip button b{display:block;color:var(--txt);font-size:13px}
+  .wkstrip button.on{border-color:var(--acc);color:var(--acc)}
+  .wkstrip button.on b{color:var(--acc)}
+  .kbar{height:8px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:8px 0 6px}
+  .kbar>div{height:100%;background:var(--acc);width:0;transition:width .25s}
+  .kbar>div.over{background:var(--bad)}
+  .macros{display:flex;gap:14px;font-size:12.5px;color:var(--mut)}
+  .macros b{color:var(--txt)}
+  .slot{margin-bottom:14px}
+  .slot .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .slot .sh h2{margin:0}
+  .slot .sh .skc{font-size:12px;color:var(--mut);margin-left:auto;margin-right:10px;font-weight:600}
+  .meal{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .meal:last-child{border-bottom:none}
+  .meal .ck{width:22px;height:22px;border-radius:50%;border:2px solid var(--mut2);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;color:#06231a;font-weight:800}
+  .meal.eaten .ck{background:var(--good);border-color:var(--good)}
+  .meal .mn{font-size:15px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .meal .mn small{display:block;color:var(--mut);font-size:12px;font-weight:500}
+  .meal .mk{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+  .meal .mk small{color:var(--mut);font-weight:500;font-size:11px}
+  .ropt{padding:11px 6px;border-bottom:1px solid var(--line);font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
+  .ropt .rn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ropt .rn small{display:block;color:var(--mut);font-size:12px}
+  .ropt .rk{font-size:13px;font-weight:700;white-space:nowrap}
+  .ropt .rk.none{color:var(--mut2);font-weight:500}
+  .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .g4 input{padding:9px 8px;font-size:15px;text-align:center}
 </style>
 </head>
 <body>
@@ -142,6 +176,7 @@
   <button data-tab="log"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Log</button>
   <button data-tab="history"><svg viewBox="0 0 24 24"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><path d="M12 7v5l3 3"/></svg>History</button>
   <button data-tab="progress"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>Progress</button>
+  <button data-tab="meals"><svg viewBox="0 0 24 24"><path d="M3 2v7a3 3 0 0 0 6 0V2"/><path d="M6 12v10"/><path d="M17 2c-2 2-3 5-3 8a3 3 0 0 0 3 3v9"/></svg>Meals</button>
 </nav>
 <div id="rest" class="restbar hide">
   <div class="rtime" id="rtime">3:00</div>
@@ -154,25 +189,36 @@ const SUPABASE_URL='https://xemdbsatlbggaszpoivq.supabase.co';
 const SUPABASE_KEY='sb_publishable_WP5FED21_Cw4ZaZQEpYqxA_I1GsrO3Z';
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
-// ---- Passcode gate (change PASSCODE to whatever you like) ----
-const PASSCODE='1337';
-function gate(){
+// ---- Supabase Auth gate ----
+function authScreen(){
+  app.innerHTML=`<div class="page" style="min-height:88vh;display:flex;flex-direction:column;justify-content:center">
+    <div class="card" style="padding:28px 20px">
+      <div style="font-size:44px;margin-bottom:6px;text-align:center">\u{1F3CB}\uFE0F</div>
+      <div style="font-size:19px;font-weight:750;margin-bottom:16px;text-align:center">Nick's Workout Tracker</div>
+      <input id="em" type="email" inputmode="email" autocomplete="username" placeholder="Email" style="margin-bottom:10px">
+      <input id="pw" type="password" autocomplete="current-password" placeholder="Password" style="margin-bottom:12px">
+      <button class="btn" id="sgo">Sign in</button>
+      <div id="sgerr" style="margin-top:10px;font-size:13px;color:var(--bad);min-height:16px;text-align:center"></div>
+    </div></div>`;
+}
+async function gate(){
+  try{const {data:{session}}=await sb.auth.getSession(); if(session) return;}catch(e){}
   return new Promise(res=>{
-    if(localStorage.getItem('wt_ok')==='1'){res();return}
-    app.innerHTML=`<div class="page" style="min-height:88vh;display:flex;flex-direction:column;justify-content:center">
-      <div class="card" style="text-align:center;padding:28px 20px">
-        <div style="font-size:44px;margin-bottom:6px">🏋️</div>
-        <div style="font-size:19px;font-weight:750;margin-bottom:16px">Nick's Workout Tracker</div>
-        <input id="pc" type="password" inputmode="text" placeholder="Passcode" style="text-align:center;margin-bottom:12px">
-        <button class="btn" id="pcgo">Unlock</button>
-        <div id="pcerr" style="margin-top:10px;font-size:13px;color:var(--bad);min-height:16px"></div>
-      </div></div>`;
-    const go=()=>{const v=document.querySelector('#pc').value;
-      if(v===PASSCODE){localStorage.setItem('wt_ok','1');res()}
-      else{document.querySelector('#pcerr').textContent='Incorrect passcode';document.querySelector('#pc').value=''}};
-    document.querySelector('#pcgo').onclick=go;
-    document.querySelector('#pc').onkeydown=e=>{if(e.key==='Enter')go()};
-    document.querySelector('#pc').focus();
+    authScreen();
+    const go=async()=>{
+      const b=document.querySelector('#sgo'),er=document.querySelector('#sgerr');
+      const email=document.querySelector('#em').value.trim();
+      const password=document.querySelector('#pw').value;
+      if(!email||!password){er.textContent='Enter your email and password';return}
+      b.disabled=true;b.textContent='Signing in\u2026';er.textContent='';
+      const {error}=await sb.auth.signInWithPassword({email,password});
+      if(error){b.disabled=false;b.textContent='Sign in';er.textContent=error.message;document.querySelector('#pw').value='';return}
+      res();
+    };
+    document.querySelector('#sgo').onclick=go;
+    document.querySelector('#em').onkeydown=e=>{if(e.key==='Enter')document.querySelector('#pw').focus()};
+    document.querySelector('#pw').onkeydown=e=>{if(e.key==='Enter')go()};
+    document.querySelector('#em').focus();
   });
 }
 
@@ -205,19 +251,21 @@ async function lastFor(exId){
 
 let TAB='today';
 function setTab(t){TAB=t;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
-  ({today:renderToday,log:renderLog,history:renderHistory,progress:renderProgress})[t]();window.scrollTo(0,0)}
+  ({today:renderToday,log:renderLog,history:renderHistory,progress:renderProgress,meals:renderMeals})[t]();window.scrollTo(0,0)}
 
 async function renderToday(){
   app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div></header>
     <div class="page"><div class="spin"></div></div>`;
   const sinceW=new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   const since30=new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
-  const [{data:wks},{data:wmeta},{data:weighs},{count:total}]=await Promise.all([
+  const [{data:wks},{data:wmeta},{data:weighs},{count:total},{data:meals}]=await Promise.all([
     sb.from('wt_workouts').select('id,date,name,kind').order('date',{ascending:false}).order('id',{ascending:false}).limit(60),
     sb.from('wt_sets').select('weight,reps,wt_workouts!inner(date)').gte('wt_workouts.date',since30),
     sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60),
-    sb.from('wt_workouts').select('*',{count:'exact',head:true}).neq('kind','quick')
+    sb.from('wt_workouts').select('*',{count:'exact',head:true}).neq('kind','quick'),
+    sb.from('wt_meal_plan').select(RSEL).eq('date',todayISO())
   ]);
+  let mk=0,me=0,mp=0;(meals||[]).forEach(r=>{const v=mealVals(r);mk+=v.kcal;mp+=v.p;if(r.eaten)me+=v.kcal});const tgt=kcalTarget();
   const real=(wks||[]).filter(w=>w.kind!=='quick');
   const weekCount=real.filter(w=>w.date>=sinceW).length;
   const last=real[0]?real[0].date:null;
@@ -240,6 +288,10 @@ async function renderToday(){
     </div>
     <div class="card"><h2>30-day volume</h2>
       <div style="font-size:30px;font-weight:750;letter-spacing:-.5px">${Math.round(vol30).toLocaleString()}<span style="font-size:14px;color:var(--mut);font-weight:600"> lb lifted</span></div>
+    </div>
+    <div class="card" onclick="setTab('meals')" style="cursor:pointer"><div class="row sp"><h2 style="margin:0">Food today</h2><span class="muted" style="font-size:12px">Meals →</span></div>
+      <div style="margin-top:10px;font-size:26px;font-weight:750;letter-spacing:-.5px">${Math.round(me).toLocaleString()}<span style="font-size:13px;color:var(--mut);font-weight:600"> kcal eaten${mk>me?' · '+Math.round(mk).toLocaleString()+' planned':''}${tgt?' · target '+tgt.toLocaleString():''}</span></div>
+      ${mp?`<div class="muted" style="font-size:12px;margin-top:2px">${Math.round(mp)}g protein planned</div>`:''}
     </div>
     <div class="card"><div class="row sp"><h2 style="margin:0">Recent</h2><button class="btn ghost sm" onclick="setTab('history')">All →</button></div>
       <div id="recent" style="margin-top:12px"></div></div>
@@ -835,11 +887,189 @@ function chartOpts(){return{responsive:true,maintainAspectRatio:false,
   scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6,maxRotation:0}},
     y:{grid:{color:'#1c2438'},ticks:{maxTicksLimit:5}}}}}
 
-function lock(){localStorage.removeItem('wt_ok');location.reload()}
+// ================= MEALS =================
+const SLOTS=[['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner'],['snack','Snacks']];
+let MDAY=todayISO();
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const addDays=(d,n)=>{const[y,m,da]=d.split('-');const x=new Date(y,m-1,da);x.setDate(x.getDate()+n);return x.toLocaleDateString('en-CA')};
+const kcalTarget=()=>+(localStorage.getItem('wt_kcal_target')||0);
+const RSEL='id,date,slot,recipe_id,custom_name,servings,calories,protein_g,carbs_g,fat_g,eaten,notes,recipes(name,recipe_nutrition(calories,protein_g,carbs_g,fat_g,servings_num))';
+// per-entry totals: explicit values win, else recipe_nutrition x servings
+const rnOf=m=>{let n=m.recipes&&m.recipes.recipe_nutrition;if(Array.isArray(n))n=n[0];return n||null};
+function mealVals(m){
+  const n=rnOf(m);
+  const pick=k=>m[k]!=null?+m[k]:(n&&n[k]!=null?+n[k]:0);
+  const s=+m.servings||1;
+  return {name:m.custom_name||(m.recipes&&m.recipes.name)||'Meal',kcal:pick('calories')*s,p:pick('protein_g')*s,c:pick('carbs_g')*s,f:pick('fat_g')*s,known:m.calories!=null||!!(n&&n.calories!=null)};
+}
+async function loadRecipes(force){
+  if(DB.recipes&&!force)return DB.recipes;
+  const {data,error}=await sb.from('recipes').select('id,name,category,servings,recipe_nutrition(calories,protein_g,carbs_g,fat_g,fiber_g,servings_num,notes)').order('name');
+  if(error){toast('Recipes: '+error.message);DB.recipes=[];return DB.recipes}
+  DB.recipes=(data||[]).map(r=>({...r,n:Array.isArray(r.recipe_nutrition)?r.recipe_nutrition[0]:r.recipe_nutrition}));
+  return DB.recipes;
+}
+async function renderMeals(){
+  app.innerHTML=`<header><div><h1>Meals</h1><div class="sub">Plan &amp; log what you eat</div></div>
+    <button class="btn ghost sm" onclick="setTarget()" title="Daily target">🎯 ${kcalTarget()?kcalTarget().toLocaleString()+' kcal':'Set target'}</button></header>
+    <div class="page"><div class="spin"></div></div>`;
+  // week strip: Mon..Sun around MDAY
+  const [y,m,d]=MDAY.split('-');const dt=new Date(y,m-1,d);const dow=(dt.getDay()+6)%7;
+  const wk0=addDays(MDAY,-dow),wk6=addDays(wk0,6);
+  const {data:rows,error}=await sb.from('wt_meal_plan').select(RSEL).gte('date',wk0).lte('date',wk6).order('id');
+  if(error){app.querySelector('.page').innerHTML=`<div class="card">${esc(error.message)}</div>`;return}
+  const byDay={};(rows||[]).forEach(r=>{(byDay[r.date]=byDay[r.date]||[]).push(r)});
+  const dayTot=list=>{const t={kcal:0,p:0,c:0,f:0,eaten:0};(list||[]).forEach(r=>{const v=mealVals(r);t.kcal+=v.kcal;t.p+=v.p;t.c+=v.c;t.f+=v.f;if(r.eaten)t.eaten+=v.kcal});return t};
+  const strip=[];for(let i=0;i<7;i++){const dd=addDays(wk0,i);const t=dayTot(byDay[dd]);const[yy,mm,da]=dd.split('-');const lab=new Date(yy,mm-1,da).toLocaleDateString('en-US',{weekday:'narrow'});
+    strip.push(`<button class="${dd===MDAY?'on':''}" onclick="MDAY='${dd}';renderMeals()">${lab} ${+da}<b>${t.kcal?Math.round(t.kcal):'–'}</b></button>`)}
+  const today=byDay[MDAY]||[];const T=dayTot(today);const tgt=kcalTarget();
+  const pct=tgt?Math.min(100,Math.round(T.kcal/tgt*100)):0;
+  let html=`<div class="daynav"><button onclick="MDAY=addDays(MDAY,-1);renderMeals()">‹</button>
+      <div class="dn">${MDAY===todayISO()?'Today':niceDate(MDAY)}<small>${niceDateY(MDAY)}</small></div>
+      <button onclick="MDAY=addDays(MDAY,1);renderMeals()">›</button></div>
+    <div class="wkstrip">${strip.join('')}</div>
+    <div class="card"><div class="row sp"><div><span style="font-size:30px;font-weight:750;letter-spacing:-.5px">${Math.round(T.kcal).toLocaleString()}</span><span style="font-size:13px;color:var(--mut)"> kcal ${tgt?'/ '+tgt.toLocaleString():'planned'}</span></div>
+        <div class="muted" style="font-size:12px;text-align:right">${Math.round(T.eaten).toLocaleString()} eaten<br>${tgt?(tgt-T.kcal>=0?Math.round(tgt-T.kcal)+' left':Math.round(T.kcal-tgt)+' over'):''}</div></div>
+      ${tgt?`<div class="kbar"><div class="${T.kcal>tgt?'over':''}" style="width:${pct}%"></div></div>`:''}
+      <div class="macros"><span>P <b>${Math.round(T.p)}g</b></span><span>C <b>${Math.round(T.c)}g</b></span><span>F <b>${Math.round(T.f)}g</b></span></div></div>`;
+  for(const [key,label] of SLOTS){
+    const list=today.filter(r=>r.slot===key);const st=dayTot(list);
+    html+=`<div class="card slot"><div class="sh"><h2>${label}</h2><span class="skc">${list.length?Math.round(st.kcal)+' kcal':''}</span><button class="btn sec sm" onclick="addMeal('${key}')">+ Add</button></div>
+      ${list.length?list.map(r=>{const v=mealVals(r);return `<div class="meal ${r.eaten?'eaten':''}" onclick="openMeal(${r.id})">
+        <div class="ck" onclick="event.stopPropagation();toggleEaten(${r.id},${!r.eaten})">${r.eaten?'✓':''}</div>
+        <div class="mn">${esc(v.name)}<small>${(+r.servings||1)!==1?fmt(r.servings)+' servings':'1 serving'}${r.recipe_id?' · recipe':''}${!v.known?' · no estimate':''}</small></div>
+        <div class="mk">${v.known?Math.round(v.kcal):'?'}<small> kcal</small></div></div>`}).join(''):'<div class="muted" style="font-size:13px">Nothing planned.</div>'}</div>`;
+  }
+  app.querySelector('.page').innerHTML=html;
+}
+function setTarget(){
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:14px">Daily calorie target</div>
+    <input id="tg" inputmode="numeric" placeholder="e.g. 2200" value="${kcalTarget()||''}" style="margin-bottom:12px">
+    <button class="btn" id="tgs">Save</button><button class="btn ghost" id="tgc" style="margin-top:8px">Clear target</button></div>`;
+  document.body.appendChild(ov);const inp=ov.querySelector('#tg');setTimeout(()=>inp.focus(),50);
+  ov.querySelector('#tgs').onclick=()=>{const v=parseInt(inp.value);if(v>0)localStorage.setItem('wt_kcal_target',v);ov.remove();renderMeals()};
+  ov.querySelector('#tgc').onclick=()=>{localStorage.removeItem('wt_kcal_target');ov.remove();renderMeals()};
+}
+async function toggleEaten(id,val){
+  const {error}=await sb.from('wt_meal_plan').update({eaten:val}).eq('id',id);
+  if(error){toast(error.message);return}renderMeals();
+}
+// ---- Add a meal: pick a recipe or type it ----
+async function addMeal(slot){
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet">
+    <div class="row sp" style="margin-bottom:10px"><div style="font-size:17px;font-weight:750">Add to ${SLOTS.find(s=>s[0]===slot)[1]}</div>
+      <select id="mslot" style="width:auto;padding:8px 10px;font-size:13px">${SLOTS.map(s=>`<option value="${s[0]}" ${s[0]===slot?'selected':''}>${s[1]}</option>`).join('')}</select></div>
+    <div class="seg"><button data-m="recipe" class="on">From my recipes</button><button data-m="custom">Type it in</button></div>
+    <div id="mbody"><div class="spin"></div></div></div>`;
+  document.body.appendChild(ov);
+  const body=ov.querySelector('#mbody');let mode='recipe';
+  ov.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{mode=b.dataset.m;ov.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x===b));draw()});
+  const curSlot=()=>ov.querySelector('#mslot').value;
+  async function draw(){
+    if(mode==='recipe'){
+      const recs=await loadRecipes();
+      body.innerHTML=`<div class="search"><input id="rq" placeholder="Search ${recs.length} recipes…"></div><div id="rlist"></div>`;
+      const list=body.querySelector('#rlist');
+      const paint=q=>{q=(q||'').toLowerCase().trim();const f=recs.filter(r=>!q||r.name.toLowerCase().includes(q)||(r.category||'').toLowerCase().includes(q)).slice(0,60);
+        list.innerHTML=f.length?f.map(r=>`<div class="ropt" data-id="${r.id}"><div class="rn">${esc(r.name)}<small>${esc(r.category||'')}${r.servings?' · '+esc(r.servings):''}</small></div>
+          <div class="rk ${r.n?'':'none'}">${r.n?Math.round(r.n.calories)+' kcal':'no estimate'}</div></div>`).join(''):'<div class="muted center" style="padding:20px">No match.</div>';
+        list.querySelectorAll('.ropt').forEach(el=>el.onclick=()=>pickRecipe(recs.find(r=>r.id===el.dataset.id)))};
+      paint('');body.querySelector('#rq').oninput=e=>paint(e.target.value);setTimeout(()=>body.querySelector('#rq').focus(),50);
+    } else {
+      body.innerHTML=`<label class="fld">What did you eat?</label>
+        <input id="ctext" placeholder="e.g. 2 eggs, 2 toast with butter, coffee" style="margin-bottom:10px">
+        <button class="btn sec" id="cest" style="margin-bottom:12px">🤖 Estimate calories</button>
+        <div id="cerr" style="color:var(--bad);font-size:13px;min-height:14px;margin-bottom:6px"></div>
+        <div id="cnote" class="muted" style="font-size:12px;margin-bottom:8px"></div>
+        <label class="fld">Per serving — kcal / protein / carbs / fat (g)</label>
+        <div class="g4" style="margin-bottom:10px"><input id="ck" inputmode="numeric" placeholder="kcal"><input id="cp" inputmode="numeric" placeholder="P"><input id="cc" inputmode="numeric" placeholder="C"><input id="cf" inputmode="numeric" placeholder="F"></div>
+        <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="cs" inputmode="decimal" value="1"></div>
+          <div style="flex:1"><label class="fld">Date</label><input id="cd" type="date" value="${MDAY}"></div></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="ceat" checked style="width:auto"> Already eaten</label>
+        <button class="btn" id="csave">Save</button>`;
+      const $q=s=>body.querySelector(s);setTimeout(()=>$q('#ctext').focus(),50);
+      $q('#cest').onclick=async()=>{const t=$q('#ctext').value.trim();if(!t){$q('#cerr').textContent='Type what you ate first.';return}
+        const b=$q('#cest');b.disabled=true;b.textContent='Estimating…';$q('#cerr').textContent='';
+        const r=await estimateNutrition({text:t});b.disabled=false;b.textContent='🤖 Estimate calories';
+        if(r.error){$q('#cerr').textContent=r.error;return}
+        const e=r.estimate;$q('#ck').value=Math.round(e.calories);$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
+        $q('#cnote').textContent=e.notes||''};
+      $q('#csave').onclick=async()=>{const name=$q('#ctext').value.trim();const kcal=parseFloat($q('#ck').value);
+        if(!name){$q('#cerr').textContent='Type what you ate.';return}
+        const row={date:$q('#cd').value||MDAY,slot:curSlot(),custom_name:name,servings:parseFloat($q('#cs').value)||1,eaten:$q('#ceat').checked,
+          calories:isNaN(kcal)?null:kcal,protein_g:parseFloat($q('#cp').value)||null,carbs_g:parseFloat($q('#cc').value)||null,fat_g:parseFloat($q('#cf').value)||null};
+        const {error}=await sb.from('wt_meal_plan').insert(row);if(error){$q('#cerr').textContent=error.message;return}
+        ov.remove();toast('Meal added');MDAY=row.date;renderMeals()};
+    }
+  }
+  async function pickRecipe(r){
+    body.innerHTML=`<div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(r.name)}</div>
+      <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(r.category||'')}${r.servings?' · recipe makes '+esc(r.servings):''}</div>
+      <div id="rn" class="card" style="padding:12px">${r.n?`<div style="font-size:22px;font-weight:750">${Math.round(r.n.calories)}<span style="font-size:12px;color:var(--mut)"> kcal / serving</span></div>
+        <div class="macros" style="margin-top:4px"><span>P <b>${Math.round(r.n.protein_g||0)}g</b></span><span>C <b>${Math.round(r.n.carbs_g||0)}g</b></span><span>F <b>${Math.round(r.n.fat_g||0)}g</b></span></div>
+        ${r.n.notes?`<div class="muted" style="font-size:12px;margin-top:6px">${esc(r.n.notes)}</div>`:''}`:`<div class="muted" style="font-size:13px;margin-bottom:8px">No calorie estimate yet.</div>`}
+        <button class="btn sec sm" id="rest" style="margin-top:8px">🤖 ${r.n?'Re-estimate':'Estimate with AI'}</button><div id="rerr" style="color:var(--bad);font-size:13px;margin-top:6px"></div></div>
+      <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="rs" inputmode="decimal" value="1"></div>
+        <div style="flex:1"><label class="fld">Date</label><input id="rd" type="date" value="${MDAY}"></div></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="reat" style="width:auto"> Already eaten</label>
+      <button class="btn" id="rsave">Add to plan</button><button class="btn ghost" id="rback" style="margin-top:8px">← Back</button>`;
+    const $q=s=>body.querySelector(s);
+    $q('#rback').onclick=draw;
+    $q('#rest').onclick=async()=>{const b=$q('#rest');b.disabled=true;b.textContent='Estimating…';$q('#rerr').textContent='';
+      const res=await estimateNutrition({recipe_id:r.id});
+      if(res.error){b.disabled=false;b.textContent='🤖 Try again';$q('#rerr').textContent=res.error;return}
+      await loadRecipes(true);pickRecipe(DB.recipes.find(x=>x.id===r.id))};
+    $q('#rsave').onclick=async()=>{const row={date:$q('#rd').value||MDAY,slot:curSlot(),recipe_id:r.id,servings:parseFloat($q('#rs').value)||1,eaten:$q('#reat').checked};
+      const {error}=await sb.from('wt_meal_plan').insert(row);if(error){$q('#rerr').textContent=error.message;return}
+      ov.remove();toast('Added');MDAY=row.date;renderMeals()};
+  }
+  draw();
+}
+async function estimateNutrition(payload){
+  try{const {data,error}=await sb.functions.invoke('estimate-nutrition',{body:payload});
+    if(error){let msg=error.message||'Request failed';try{const ctx=error.context;if(ctx&&ctx.json){const j=await ctx.json();if(j&&j.error)msg=j.error}}catch(e){}return {error:msg}}
+    if(data&&data.error)return {error:data.error};return data||{error:'No reply'}}
+  catch(e){return {error:e.message||'Request failed'}}
+}
+// ---- edit / delete an entry ----
+async function openMeal(id){
+  const {data:m,error}=await sb.from('wt_meal_plan').select(RSEL).eq('id',id).single();
+  if(error||!m){toast('Not found');return}
+  const v=mealVals(m);const n=rnOf(m);
+  const per=k=>m[k]!=null?m[k]:(n&&n[k]!=null?n[k]:'');
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:2px">${esc(v.name)}</div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px">${m.recipe_id?'From your recipes':'Custom entry'} · ${niceDate(m.date)}</div>
+    <label class="fld">Per serving — kcal / protein / carbs / fat (g)${m.recipe_id?' (blank = use recipe estimate)':''}</label>
+    <div class="g4" style="margin-bottom:10px"><input id="ek" inputmode="numeric" value="${per('calories')!==''?Math.round(per('calories')):''}" placeholder="kcal"><input id="ep" inputmode="numeric" value="${per('protein_g')!==''?Math.round(per('protein_g')):''}" placeholder="P"><input id="ec" inputmode="numeric" value="${per('carbs_g')!==''?Math.round(per('carbs_g')):''}" placeholder="C"><input id="ef" inputmode="numeric" value="${per('fat_g')!==''?Math.round(per('fat_g')):''}" placeholder="F"></div>
+    <div class="row" style="margin-bottom:10px"><div style="flex:1"><label class="fld">Servings</label><input id="es" inputmode="decimal" value="${m.servings}"></div>
+      <div style="flex:1"><label class="fld">Slot</label><select id="eslot">${SLOTS.map(s=>`<option value="${s[0]}" ${s[0]===m.slot?'selected':''}>${s[1]}</option>`).join('')}</select></div></div>
+    <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Date</label><input id="ed" type="date" value="${m.date}"></div>
+      <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:14px;margin-top:18px"><input type="checkbox" id="eeat" ${m.eaten?'checked':''} style="width:auto"> Eaten</label></div>
+    <button class="btn" id="esave">Save</button>
+    <button class="btn danger" id="edel" style="margin-top:8px">Delete</button>
+    <div id="eerr" style="color:var(--bad);font-size:13px;margin-top:8px;min-height:14px"></div></div>`;
+  document.body.appendChild(ov);const $q=s=>ov.querySelector(s);
+  const numOrNull=s=>{const x=parseFloat($q(s).value);return isNaN(x)?null:x};
+  $q('#esave').onclick=async()=>{
+    const upd={servings:parseFloat($q('#es').value)||1,slot:$q('#eslot').value,date:$q('#ed').value||m.date,eaten:$q('#eeat').checked,
+      calories:numOrNull('#ek'),protein_g:numOrNull('#ep'),carbs_g:numOrNull('#ec'),fat_g:numOrNull('#ef')};
+    // for recipe rows, values equal to the recipe estimate stay null so a re-estimate flows through
+    if(m.recipe_id&&n){for(const k of ['calories','protein_g','carbs_g','fat_g'])if(upd[k]!=null&&n[k]!=null&&Math.round(upd[k])===Math.round(n[k]))upd[k]=null}
+    const {error}=await sb.from('wt_meal_plan').update(upd).eq('id',id);if(error){$q('#eerr').textContent=error.message;return}
+    ov.remove();toast('Saved');MDAY=upd.date;renderMeals()};
+  $q('#edel').onclick=async()=>{const {error}=await sb.from('wt_meal_plan').delete().eq('id',id);if(error){$q('#eerr').textContent=error.message;return}ov.remove();toast('Deleted');renderMeals()};
+}
+
+async function lock(){try{await sb.auth.signOut()}catch(e){}localStorage.removeItem('wt_ok');location.reload()}
 if('serviceWorker'in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 (async function init(){
   await gate();
-  try{await loadCore()}catch(e){app.innerHTML=`<div class="page"><div class="card">Couldn’t connect to the database.<br><span class="muted">${e.message}</span></div></div>`;return}
+  try{await loadCore()}catch(e){
+    const perm=/permission denied|row-level security|JWT/i.test(e.message||'');
+    app.innerHTML=`<div class="page"><div class="card">${perm?'That account doesn\u2019t have access to the workout data.':'Couldn\u2019t connect to the database.'}<br><span class="muted">${e.message}</span><br><br><button class="btn ghost sm" onclick="lock()">Sign out</button></div></div>`;return}
   $('#nav').classList.remove('hide');
   document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
   setTab('today');
