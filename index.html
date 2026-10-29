@@ -169,6 +169,14 @@
   .ropt .rk.none{color:var(--mut2);font-weight:500}
   .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   .g4 input{padding:9px 8px;font-size:15px;text-align:center}
+  .itm{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;background:var(--card2)}
+  .itm .ih{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .itm .ih input{padding:8px 10px;font-size:14px}
+  .itm .ih .in{flex:2}.itm .ih .iq{flex:1}
+  .itm .g4 input{padding:7px 4px;font-size:14px}
+  .itm .x{background:none;border:none;color:var(--mut2);font-size:18px;padding:4px 6px;cursor:pointer}
+  .itot{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin:2px 2px 10px}
+  input[readonly]{opacity:.75}
 </style>
 </head>
 <body>
@@ -904,6 +912,29 @@ function mealVals(m){
   const s=+m.servings||1;
   return {name:m.custom_name||(m.recipes&&m.recipes.name)||'Meal',kcal:pick('calories')*s,p:pick('protein_g')*s,c:pick('carbs_g')*s,f:pick('fat_g')*s,known:m.calories!=null||!!(n&&n.calories!=null)};
 }
+// per-item breakdown for custom entries lives in wt_meal_plan.notes as a JSON array
+const parseItems=m=>{try{const t=m&&m.notes&&String(m.notes).trim();const j=t&&t[0]==='['?JSON.parse(t):null;return Array.isArray(j)&&j.length?j:null}catch(e){return null}};
+const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items||[]).forEach(it=>{for(const k in t)t[k]+=+it[k]||0});return t};
+// editable item list; calls onChange(totals) whenever an item changes
+function itemEditor(host,items,onChange){
+  const F=[['calories','kcal'],['protein_g','P'],['carbs_g','C'],['fat_g','F']];
+  function paint(){
+    if(!items.length){host.innerHTML='';onChange(null);return}
+    const t=itemSum(items);
+    host.innerHTML=`<label class="fld">Breakdown by item — kcal / P / C / F (g)</label>`+items.map((it,i)=>`<div class="itm">
+        <div class="ih"><input class="in" data-i="${i}" data-k="name" value="${esc(it.name)}" placeholder="Food"><input class="iq" data-i="${i}" data-k="qty" value="${esc(it.qty||'')}" placeholder="Amount"><button class="x" data-x="${i}" title="Remove">✕</button></div>
+        <div class="g4">${F.map(([k,ph])=>`<input inputmode="decimal" data-i="${i}" data-k="${k}" value="${it[k]!=null?Math.round(it[k]):''}" placeholder="${ph}">`).join('')}</div></div>`).join('')+
+      `<div class="itot"><span>${items.length} item${items.length>1?'s':''}</span><span><b>${Math.round(t.calories)}</b> kcal · P ${Math.round(t.protein_g)} · C ${Math.round(t.carbs_g)} · F ${Math.round(t.fat_g)}</span></div>
+      <button class="btn sec sm" data-add="1" style="margin-bottom:12px">+ Add item</button>`;
+    host.querySelectorAll('input').forEach(el=>el.oninput=()=>{const it=items[+el.dataset.i],k=el.dataset.k;
+      if(k==='name'||k==='qty')it[k]=el.value;else{const v=parseFloat(el.value);it[k]=isNaN(v)?0:v;
+        const tt=itemSum(items);host.querySelector('.itot span:last-child').innerHTML=`<b>${Math.round(tt.calories)}</b> kcal · P ${Math.round(tt.protein_g)} · C ${Math.round(tt.carbs_g)} · F ${Math.round(tt.fat_g)}`;onChange(tt)}});
+    host.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.x,1);paint()});
+    host.querySelector('[data-add]').onclick=()=>{items.push({name:'',qty:'',calories:0,protein_g:0,carbs_g:0,fat_g:0});paint();const ins=host.querySelectorAll('.in');ins[ins.length-1].focus()};
+    onChange(t);
+  }
+  paint();return {paint};
+}
 async function loadRecipes(force){
   if(DB.recipes&&!force)return DB.recipes;
   const {data,error}=await sb.from('recipes').select('id,name,category,servings,recipe_nutrition(calories,protein_g,carbs_g,fat_g,fiber_g,servings_num,notes)').order('name');
@@ -939,7 +970,7 @@ async function renderMeals(){
     html+=`<div class="card slot"><div class="sh"><h2>${label}</h2><span class="skc">${list.length?Math.round(st.kcal)+' kcal':''}</span><button class="btn sec sm" onclick="addMeal('${key}')">+ Add</button></div>
       ${list.length?list.map(r=>{const v=mealVals(r);return `<div class="meal ${r.eaten?'eaten':''}" onclick="openMeal(${r.id})">
         <div class="ck" onclick="event.stopPropagation();toggleEaten(${r.id},${!r.eaten})">${r.eaten?'✓':''}</div>
-        <div class="mn">${esc(v.name)}<small>${(+r.servings||1)!==1?fmt(r.servings)+' servings':'1 serving'}${r.recipe_id?' · recipe':''}${!v.known?' · no estimate':''}</small></div>
+        <div class="mn">${esc(v.name)}<small>${(+r.servings||1)!==1?fmt(r.servings)+' servings':'1 serving'}${r.recipe_id?' · recipe':''}${parseItems(r)?' · '+parseItems(r).length+' items':''}${!v.known?' · no estimate':''}</small></div>
         <div class="mk">${v.known?Math.round(v.kcal):'?'}<small> kcal</small></div></div>`}).join(''):'<div class="muted" style="font-size:13px">Nothing planned.</div>'}</div>`;
   }
   app.querySelector('.page').innerHTML=html;
@@ -985,6 +1016,7 @@ async function addMeal(slot){
         <button class="btn sec" id="cest" style="margin-bottom:12px">🤖 Estimate calories</button>
         <div id="cerr" style="color:var(--bad);font-size:13px;min-height:14px;margin-bottom:6px"></div>
         <div id="cnote" class="muted" style="font-size:12px;margin-bottom:8px"></div>
+        <div id="citems"></div>
         <label class="fld">Per serving — kcal / protein / carbs / fat (g)</label>
         <div class="g4" style="margin-bottom:10px"><input id="ck" inputmode="numeric" placeholder="kcal"><input id="cp" inputmode="numeric" placeholder="P"><input id="cc" inputmode="numeric" placeholder="C"><input id="cf" inputmode="numeric" placeholder="F"></div>
         <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="cs" inputmode="decimal" value="1"></div>
@@ -992,16 +1024,20 @@ async function addMeal(slot){
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="ceat" checked style="width:auto"> Already eaten</label>
         <button class="btn" id="csave">Save</button>`;
       const $q=s=>body.querySelector(s);setTimeout(()=>$q('#ctext').focus(),50);
+      let citems=[];
+      const setTot=t=>{['#ck','#cp','#cc','#cf'].forEach(id=>$q(id).readOnly=!!t);if(t){$q('#ck').value=Math.round(t.calories);$q('#cp').value=Math.round(t.protein_g);$q('#cc').value=Math.round(t.carbs_g);$q('#cf').value=Math.round(t.fat_g)}};
       $q('#cest').onclick=async()=>{const t=$q('#ctext').value.trim();if(!t){$q('#cerr').textContent='Type what you ate first.';return}
         const b=$q('#cest');b.disabled=true;b.textContent='Estimating…';$q('#cerr').textContent='';
         const r=await estimateNutrition({text:t});b.disabled=false;b.textContent='🤖 Estimate calories';
         if(r.error){$q('#cerr').textContent=r.error;return}
         const e=r.estimate;$q('#ck').value=Math.round(e.calories);$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
-        $q('#cnote').textContent=e.notes||''};
+        $q('#cnote').textContent=e.notes||'';
+        citems=Array.isArray(e.items)?e.items.map(x=>({...x})):[];itemEditor($q('#citems'),citems,t=>setTot(t))};
       $q('#csave').onclick=async()=>{const name=$q('#ctext').value.trim();const kcal=parseFloat($q('#ck').value);
         if(!name){$q('#cerr').textContent='Type what you ate.';return}
         const row={date:$q('#cd').value||MDAY,slot:curSlot(),custom_name:name,servings:parseFloat($q('#cs').value)||1,eaten:$q('#ceat').checked,
-          calories:isNaN(kcal)?null:kcal,protein_g:parseFloat($q('#cp').value)||null,carbs_g:parseFloat($q('#cc').value)||null,fat_g:parseFloat($q('#cf').value)||null};
+          calories:isNaN(kcal)?null:kcal,protein_g:parseFloat($q('#cp').value)||null,carbs_g:parseFloat($q('#cc').value)||null,fat_g:parseFloat($q('#cf').value)||null,
+          notes:citems.length?JSON.stringify(citems):null};
         const {error}=await sb.from('wt_meal_plan').insert(row);if(error){$q('#cerr').textContent=error.message;return}
         ov.remove();toast('Meal added');MDAY=row.date;renderMeals()};
     }
@@ -1044,6 +1080,7 @@ async function openMeal(id){
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
   ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:2px">${esc(v.name)}</div>
     <div class="muted" style="font-size:12px;margin-bottom:12px">${m.recipe_id?'From your recipes':'Custom entry'} · ${niceDate(m.date)}</div>
+    ${m.recipe_id?'':`<div id="eitems"></div><button class="btn sec sm" id="ebrk" style="margin-bottom:12px">🤖 ${parseItems(m)?'Re-do breakdown':'Break down by item'}</button><div id="ebe" style="color:var(--bad);font-size:13px;margin-bottom:6px"></div>`}
     <label class="fld">Per serving — kcal / protein / carbs / fat (g)${m.recipe_id?' (blank = use recipe estimate)':''}</label>
     <div class="g4" style="margin-bottom:10px"><input id="ek" inputmode="numeric" value="${per('calories')!==''?Math.round(per('calories')):''}" placeholder="kcal"><input id="ep" inputmode="numeric" value="${per('protein_g')!==''?Math.round(per('protein_g')):''}" placeholder="P"><input id="ec" inputmode="numeric" value="${per('carbs_g')!==''?Math.round(per('carbs_g')):''}" placeholder="C"><input id="ef" inputmode="numeric" value="${per('fat_g')!==''?Math.round(per('fat_g')):''}" placeholder="F"></div>
     <div class="row" style="margin-bottom:10px"><div style="flex:1"><label class="fld">Servings</label><input id="es" inputmode="decimal" value="${m.servings}"></div>
@@ -1055,10 +1092,21 @@ async function openMeal(id){
     <div id="eerr" style="color:var(--bad);font-size:13px;margin-top:8px;min-height:14px"></div></div>`;
   document.body.appendChild(ov);const $q=s=>ov.querySelector(s);
   const numOrNull=s=>{const x=parseFloat($q(s).value);return isNaN(x)?null:x};
+  let eitems=m.recipe_id?[]:(parseItems(m)||[]).map(x=>({...x}));
+  if(!m.recipe_id){
+    const setTot=t=>{['#ek','#ep','#ec','#ef'].forEach(id=>$q(id).readOnly=!!t);if(t){$q('#ek').value=Math.round(t.calories);$q('#ep').value=Math.round(t.protein_g);$q('#ec').value=Math.round(t.carbs_g);$q('#ef').value=Math.round(t.fat_g)}};
+    const ed=itemEditor($q('#eitems'),eitems,setTot);
+    $q('#ebrk').onclick=async()=>{const b=$q('#ebrk');b.disabled=true;b.textContent='Breaking down…';$q('#ebe').textContent='';
+      const r=await estimateNutrition({text:m.custom_name});b.disabled=false;b.textContent='🤖 Re-do breakdown';
+      if(r.error){$q('#ebe').textContent=r.error;return}
+      const it=r.estimate&&r.estimate.items;if(!Array.isArray(it)||!it.length){$q('#ebe').textContent='No items came back — try again.';return}
+      eitems.splice(0,eitems.length,...it.map(x=>({...x})));ed.paint()};
+  }
   $q('#esave').onclick=async()=>{
     const upd={servings:parseFloat($q('#es').value)||1,slot:$q('#eslot').value,date:$q('#ed').value||m.date,eaten:$q('#eeat').checked,
       calories:numOrNull('#ek'),protein_g:numOrNull('#ep'),carbs_g:numOrNull('#ec'),fat_g:numOrNull('#ef')};
     // for recipe rows, values equal to the recipe estimate stay null so a re-estimate flows through
+    if(!m.recipe_id)upd.notes=eitems.length?JSON.stringify(eitems):(parseItems(m)?null:m.notes);
     if(m.recipe_id&&n){for(const k of ['calories','protein_g','carbs_g','fat_g'])if(upd[k]!=null&&n[k]!=null&&Math.round(upd[k])===Math.round(n[k]))upd[k]=null}
     const {error}=await sb.from('wt_meal_plan').update(upd).eq('id',id);if(error){$q('#eerr').textContent=error.message;return}
     ov.remove();toast('Saved');MDAY=upd.date;renderMeals()};
