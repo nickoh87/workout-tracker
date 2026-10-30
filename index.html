@@ -169,13 +169,23 @@
   .ropt .rk.none{color:var(--mut2);font-weight:500}
   .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
   .g4 input{padding:9px 8px;font-size:15px;text-align:center}
-  .itm{border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px;background:var(--card2)}
-  .itm .ih{display:flex;gap:6px;align-items:center;margin-bottom:6px}
-  .itm .ih input{padding:8px 10px;font-size:14px}
-  .itm .ih .in{flex:2}.itm .ih .iq{flex:1}
-  .itm .g4 input{padding:7px 4px;font-size:14px}
-  .itm .x{background:none;border:none;color:var(--mut2);font-size:18px;padding:4px 6px;cursor:pointer}
-  .itot{display:flex;justify-content:space-between;font-size:13px;color:var(--mut);margin:2px 2px 10px}
+  .itbl{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px;font-variant-numeric:tabular-nums;margin-bottom:4px}
+  .itbl col.k{width:58px}.itbl col.m{width:42px}.itbl col.x{width:26px}
+  .itbl th{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);text-align:right;padding:0 4px 6px;border-bottom:1px solid var(--line)}
+  .itbl th:first-child{text-align:left}
+  .itbl td{padding:3px 0;border-bottom:1px solid var(--line);vertical-align:middle}
+  .itbl tbody tr:nth-child(even) td{background:rgba(255,255,255,.025)}
+  .itbl input{width:100%;background:transparent;border:1px solid transparent;border-radius:6px;padding:5px 4px;font-size:14px;color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
+  .itbl input:focus{border-color:var(--acc);background:var(--bg2);outline:none}
+  .itbl input.in{text-align:left;font-weight:600;padding-bottom:0}
+  .itbl input.iq{text-align:left;font-size:12px;color:var(--mut);padding-top:0}
+  .itbl td.kc input{font-weight:700}
+  .itbl .x{background:none;border:none;color:var(--mut2);font-size:15px;padding:2px;cursor:pointer;width:100%}
+  .itbl .x:hover{color:var(--bad)}
+  .itbl tfoot td{border-bottom:3px double var(--mut2);border-top:2px solid var(--mut2);padding:8px 4px;text-align:right;font-weight:750}
+  .itbl tfoot td:first-child{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  .itbl tfoot td.kc{color:var(--acc)}
+  .itadd{background:none;border:none;color:var(--acc);font-size:13px;font-weight:600;padding:8px 2px 12px;cursor:pointer}
   input[readonly]{opacity:.75}
 </style>
 </head>
@@ -289,6 +299,7 @@ async function renderToday(){
   <div class="page">
     <button class="btn" onclick="setTab('log')" style="margin-bottom:10px">+ Start a workout</button>
     <button class="btn sec" onclick="quickLog()" style="margin-bottom:16px">⚡ Quick log — just did something</button>
+    ${isStandalone()?'':`<button class="btn sec" onclick="installApp()" style="margin:-6px 0 16px">📲 Save as an app</button>`}
     <div class="grid2">
       <div class="stat"><div class="n">${weekCount}</div><div class="l">Workouts this week</div></div>
       <div class="stat"><div class="n">${daysSince==null?'–':daysSince===0?'Today':daysSince+'d'}</div><div class="l">Since last workout</div></div>
@@ -917,21 +928,26 @@ const parseItems=m=>{try{const t=m&&m.notes&&String(m.notes).trim();const j=t&&t
 const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items||[]).forEach(it=>{for(const k in t)t[k]+=+it[k]||0});return t};
 // editable item list; calls onChange(totals) whenever an item changes
 function itemEditor(host,items,onChange){
-  const F=[['calories','kcal'],['protein_g','P'],['carbs_g','C'],['fat_g','F']];
+  const F=['calories','protein_g','carbs_g','fat_g'];
+  const r0=v=>Math.round(+v||0);
+  function foot(){const t=itemSum(items);return `<td>Total</td><td class="kc">${r0(t.calories)}</td><td>${r0(t.protein_g)}</td><td>${r0(t.carbs_g)}</td><td>${r0(t.fat_g)}</td><td></td>`}
   function paint(){
     if(!items.length){host.innerHTML='';onChange(null);return}
-    const t=itemSum(items);
-    host.innerHTML=`<label class="fld">Breakdown by item — kcal / P / C / F (g)</label>`+items.map((it,i)=>`<div class="itm">
-        <div class="ih"><input class="in" data-i="${i}" data-k="name" value="${esc(it.name)}" placeholder="Food"><input class="iq" data-i="${i}" data-k="qty" value="${esc(it.qty||'')}" placeholder="Amount"><button class="x" data-x="${i}" title="Remove">✕</button></div>
-        <div class="g4">${F.map(([k,ph])=>`<input inputmode="decimal" data-i="${i}" data-k="${k}" value="${it[k]!=null?Math.round(it[k]):''}" placeholder="${ph}">`).join('')}</div></div>`).join('')+
-      `<div class="itot"><span>${items.length} item${items.length>1?'s':''}</span><span><b>${Math.round(t.calories)}</b> kcal · P ${Math.round(t.protein_g)} · C ${Math.round(t.carbs_g)} · F ${Math.round(t.fat_g)}</span></div>
-      <button class="btn sec sm" data-add="1" style="margin-bottom:12px">+ Add item</button>`;
-    host.querySelectorAll('input').forEach(el=>el.oninput=()=>{const it=items[+el.dataset.i],k=el.dataset.k;
-      if(k==='name'||k==='qty')it[k]=el.value;else{const v=parseFloat(el.value);it[k]=isNaN(v)?0:v;
-        const tt=itemSum(items);host.querySelector('.itot span:last-child').innerHTML=`<b>${Math.round(tt.calories)}</b> kcal · P ${Math.round(tt.protein_g)} · C ${Math.round(tt.carbs_g)} · F ${Math.round(tt.fat_g)}`;onChange(tt)}});
+    host.innerHTML=`<label class="fld">Breakdown by item</label>
+      <table class="itbl"><colgroup><col><col class="k"><col class="m"><col class="m"><col class="m"><col class="x"></colgroup>
+      <thead><tr><th>Item</th><th>kcal</th><th>P</th><th>C</th><th>F</th><th></th></tr></thead>
+      <tbody>${items.map((it,i)=>`<tr>
+        <td><input class="in" data-i="${i}" data-k="name" value="${esc(it.name)}" placeholder="Food"><input class="iq" data-i="${i}" data-k="qty" value="${esc(it.qty||'')}" placeholder="amount"></td>
+        ${F.map(k=>`<td class="${k==='calories'?'kc':''}"><input inputmode="decimal" data-i="${i}" data-k="${k}" value="${it[k]!=null?r0(it[k]):''}"></td>`).join('')}
+        <td><button class="x" data-x="${i}" title="Remove">✕</button></td></tr>`).join('')}</tbody>
+      <tfoot><tr>${foot()}</tr></tfoot></table>
+      <button class="itadd" data-add="1">+ Add item</button>`;
+    host.querySelectorAll('input').forEach(el=>{el.onfocus=()=>el.select();el.oninput=()=>{const it=items[+el.dataset.i],k=el.dataset.k;
+      if(k==='name'||k==='qty'){it[k]=el.value;return}const v=parseFloat(el.value);it[k]=isNaN(v)?0:v;
+      host.querySelector('tfoot tr').innerHTML=foot();onChange(itemSum(items))}});
     host.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.x,1);paint()});
     host.querySelector('[data-add]').onclick=()=>{items.push({name:'',qty:'',calories:0,protein_g:0,carbs_g:0,fat_g:0});paint();const ins=host.querySelectorAll('.in');ins[ins.length-1].focus()};
-    onChange(t);
+    onChange(itemSum(items));
   }
   paint();return {paint};
 }
@@ -1025,7 +1041,7 @@ async function addMeal(slot){
         <button class="btn" id="csave">Save</button>`;
       const $q=s=>body.querySelector(s);setTimeout(()=>$q('#ctext').focus(),50);
       let citems=[];
-      const setTot=t=>{['#ck','#cp','#cc','#cf'].forEach(id=>$q(id).readOnly=!!t);if(t){$q('#ck').value=Math.round(t.calories);$q('#cp').value=Math.round(t.protein_g);$q('#cc').value=Math.round(t.carbs_g);$q('#cf').value=Math.round(t.fat_g)}};
+      const setTot=t=>{['#ck','#cp','#cc','#cf'].forEach(id=>$q(id).readOnly=!!t);{const g=$q('#ck').closest('.g4');g.style.display=t?'none':'';if(g.previousElementSibling)g.previousElementSibling.style.display=t?'none':''}if(t){$q('#ck').value=Math.round(t.calories);$q('#cp').value=Math.round(t.protein_g);$q('#cc').value=Math.round(t.carbs_g);$q('#cf').value=Math.round(t.fat_g)}};
       $q('#cest').onclick=async()=>{const t=$q('#ctext').value.trim();if(!t){$q('#cerr').textContent='Type what you ate first.';return}
         const b=$q('#cest');b.disabled=true;b.textContent='Estimating…';$q('#cerr').textContent='';
         const r=await estimateNutrition({text:t});b.disabled=false;b.textContent='🤖 Estimate calories';
@@ -1094,7 +1110,7 @@ async function openMeal(id){
   const numOrNull=s=>{const x=parseFloat($q(s).value);return isNaN(x)?null:x};
   let eitems=m.recipe_id?[]:(parseItems(m)||[]).map(x=>({...x}));
   if(!m.recipe_id){
-    const setTot=t=>{['#ek','#ep','#ec','#ef'].forEach(id=>$q(id).readOnly=!!t);if(t){$q('#ek').value=Math.round(t.calories);$q('#ep').value=Math.round(t.protein_g);$q('#ec').value=Math.round(t.carbs_g);$q('#ef').value=Math.round(t.fat_g)}};
+    const setTot=t=>{['#ek','#ep','#ec','#ef'].forEach(id=>$q(id).readOnly=!!t);{const g=$q('#ek').closest('.g4');g.style.display=t?'none':'';if(g.previousElementSibling)g.previousElementSibling.style.display=t?'none':''}if(t){$q('#ek').value=Math.round(t.calories);$q('#ep').value=Math.round(t.protein_g);$q('#ec').value=Math.round(t.carbs_g);$q('#ef').value=Math.round(t.fat_g)}};
     const ed=itemEditor($q('#eitems'),eitems,setTot);
     $q('#ebrk').onclick=async()=>{const b=$q('#ebrk');b.disabled=true;b.textContent='Breaking down…';$q('#ebe').textContent='';
       const r=await estimateNutrition({text:m.custom_name});b.disabled=false;b.textContent='🤖 Re-do breakdown';
@@ -1113,6 +1129,24 @@ async function openMeal(id){
   $q('#edel').onclick=async()=>{const {error}=await sb.from('wt_meal_plan').delete().eq('id',id);if(error){$q('#eerr').textContent=error.message;return}ov.remove();toast('Deleted');renderMeals()};
 }
 
+// ---- install as an app (PWA) ----
+let INSTALL_EVT=null;
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INSTALL_EVT=e});
+window.addEventListener('appinstalled',()=>{INSTALL_EVT=null;toast('Installed — open it from your home screen / Start menu')});
+async function installApp(){
+  if(INSTALL_EVT){INSTALL_EVT.prompt();try{await INSTALL_EVT.userChoice}catch(e){}INSTALL_EVT=null;return}
+  const ua=navigator.userAgent,ios=/iphone|ipad|ipod/i.test(ua)||(/macintosh/i.test(ua)&&navigator.maxTouchPoints>1),android=/android/i.test(ua);
+  const steps=ios?['Open this page in <b>Safari</b>','Tap the <b>Share</b> button (square with the up arrow)','Tap <b>Add to Home Screen</b> → <b>Add</b>']
+    :android?['Tap the <b>⋮</b> menu in Chrome (top right)','Tap <b>Add to Home screen</b> → <b>Install</b>']
+    :['Click the <b>install icon</b> at the right end of the address bar (a monitor with a down arrow)','Or: Chrome <b>⋮</b> menu → <b>Cast, save and share</b> → <b>Install page as app</b>','If neither shows, it is already installed — check your Start menu for <b>Workouts</b>'];
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:12px">📲 Save as an app</div>
+    <ol style="margin:0 0 16px 18px;padding:0;line-height:1.7;font-size:15px">${steps.map(x=>`<li>${x}</li>`).join('')}</ol>
+    <div class="muted" style="font-size:12px;margin-bottom:14px">It opens full-screen with its own icon and stays signed in.</div>
+    <button class="btn" onclick="this.closest('.ovr').remove()">Got it</button></div>`;
+  document.body.appendChild(ov);
+}
 async function lock(){try{await sb.auth.signOut()}catch(e){}localStorage.removeItem('wt_ok');location.reload()}
 if('serviceWorker'in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 (async function init(){
