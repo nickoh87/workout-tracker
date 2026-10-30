@@ -185,6 +185,18 @@
   .itbl tfoot td{border-bottom:3px double var(--mut2);border-top:2px solid var(--mut2);padding:8px 4px;text-align:right;font-weight:750}
   .itbl tfoot td:first-child{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
   .itbl tfoot td.kc{color:var(--acc)}
+  .itleg{font-size:11.5px;color:var(--mut);margin:-2px 0 8px;display:flex;flex-wrap:wrap;gap:4px 12px}
+  .itleg b{color:var(--txt);font-weight:700}
+  .nft{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums;margin:4px 0 14px}
+  .nft th{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);text-align:right;padding:10px 4px 5px;border-bottom:1px solid var(--line)}
+  .nft th:first-child{text-align:left}
+  .nft td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
+  .nft td:first-child{text-align:left}
+  .nft td.dv{width:96px;color:var(--mut)}
+  .nft .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:var(--line);vertical-align:middle;margin-left:6px;overflow:hidden}
+  .nft .bar i{display:block;height:100%;background:var(--acc)}
+  .nft .bar i.hi{background:var(--bad)}
+  .nfhint{font-size:12px;color:var(--mut);margin:0 0 12px}
   .itadd{background:none;border:none;color:var(--acc);font-size:13px;font-weight:600;padding:8px 2px 12px;cursor:pointer}
   input[readonly]{opacity:.75}
 </style>
@@ -927,6 +939,17 @@ function mealVals(m){
 const parseItems=m=>{try{const t=m&&m.notes&&String(m.notes).trim();const j=t&&t[0]==='['?JSON.parse(t):null;return Array.isArray(j)&&j.length?j:null}catch(e){return null}};
 const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items||[]).forEach(it=>{for(const k in t)t[k]+=+it[k]||0});return t};
 // editable item list; calls onChange(totals) whenever an item changes
+// extra nutrients per item (from the AI breakdown); dv = Canadian % Daily Value reference; lim = nutrient to limit
+const NUTR=[['Other',[['fiber_g','Fibre','g',28],['sugar_g','Sugars','g',100,1],['sat_fat_g','Saturated fat','g',20,1],['cholesterol_mg','Cholesterol','mg',300,1],['sodium_mg','Sodium','mg',2300,1]]],
+  ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['vit_a_mcg','Vitamin A','mcg',900],['vit_c_mg','Vitamin C','mg',90],['vit_d_mcg','Vitamin D','mcg',20],['vit_b12_mcg','Vitamin B12','mcg',2.4]]]];
+const hasMicros=items=>(items||[]).some(it=>NUTR.some(g=>g[1].some(n=>it[n[0]]!=null)));
+function nutrFacts(items){
+  if(!hasMicros(items))return `<div class="nfhint">Tap <b>🤖 Re-do breakdown</b> to add fibre, sodium, vitamins &amp; minerals.</div>`;
+  const tot=k=>(items||[]).reduce((a,it)=>a+(+it[k]||0),0);
+  const fv=v=>v>=100?Math.round(v).toLocaleString():v>=10?Math.round(v):(Math.round(v*10)/10);
+  return `<table class="nft">${NUTR.map(([grp,list])=>`<tr><th>${grp}</th><th>Amount</th><th>% Daily</th></tr>`+list.map(([k,lab,u,dv,lim])=>{const v=tot(k),pc=Math.round(v/dv*100);
+    return `<tr><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${pc}%<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>`}).join('')).join('')}</table>`;
+}
 function itemEditor(host,items,onChange){
   const F=['calories','protein_g','carbs_g','fat_g'];
   const r0=v=>Math.round(+v||0);
@@ -934,14 +957,16 @@ function itemEditor(host,items,onChange){
   function paint(){
     if(!items.length){host.innerHTML='';onChange(null);return}
     host.innerHTML=`<label class="fld">Breakdown by item</label>
+      <div class="itleg"><span><b>kcal</b> calories</span><span><b>P</b> protein (g)</span><span><b>C</b> carbs (g)</span><span><b>F</b> fat (g)</span></div>
       <table class="itbl"><colgroup><col><col class="k"><col class="m"><col class="m"><col class="m"><col class="x"></colgroup>
-      <thead><tr><th>Item</th><th>kcal</th><th>P</th><th>C</th><th>F</th><th></th></tr></thead>
+      <thead><tr><th>Item</th><th title="Calories">kcal</th><th title="Protein (g)">P</th><th title="Carbohydrates (g)">C</th><th title="Fat (g)">F</th><th></th></tr></thead>
       <tbody>${items.map((it,i)=>`<tr>
         <td><input class="in" data-i="${i}" data-k="name" value="${esc(it.name)}" placeholder="Food"><input class="iq" data-i="${i}" data-k="qty" value="${esc(it.qty||'')}" placeholder="amount"></td>
         ${F.map(k=>`<td class="${k==='calories'?'kc':''}"><input inputmode="decimal" data-i="${i}" data-k="${k}" value="${it[k]!=null?r0(it[k]):''}"></td>`).join('')}
         <td><button class="x" data-x="${i}" title="Remove">✕</button></td></tr>`).join('')}</tbody>
       <tfoot><tr>${foot()}</tr></tfoot></table>
-      <button class="itadd" data-add="1">+ Add item</button>`;
+      <button class="itadd" data-add="1">+ Add item</button>
+      <label class="fld" style="margin-top:4px">Nutrition — whole meal, per serving</label>${nutrFacts(items)}`;
     host.querySelectorAll('input').forEach(el=>{el.onfocus=()=>el.select();el.oninput=()=>{const it=items[+el.dataset.i],k=el.dataset.k;
       if(k==='name'||k==='qty'){it[k]=el.value;return}const v=parseFloat(el.value);it[k]=isNaN(v)?0:v;
       host.querySelector('tfoot tr').innerHTML=foot();onChange(itemSum(items))}});
