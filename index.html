@@ -196,6 +196,20 @@
   .nft .bar{display:inline-block;width:38px;height:5px;border-radius:3px;background:var(--line);vertical-align:middle;margin-left:6px;overflow:hidden}
   .nft .bar i{display:block;height:100%;background:var(--acc)}
   .nft .bar i.hi{background:var(--bad)}
+  .nft tr.nrow{cursor:pointer}
+  .nft tr.nrow:hover td{background:rgba(255,255,255,.03)}
+  .nft tr.nrow td:first-child::before{content:'▸';display:inline-block;width:14px;color:var(--mut2);font-size:11px;transition:transform .15s}
+  .nft tr.nrow.open td:first-child::before{transform:rotate(90deg);color:var(--acc)}
+  .nft tr.nrow.open td{border-bottom-color:transparent}
+  .nft tr.ndet td{padding:0 4px 8px 18px;background:rgba(91,140,255,.05)}
+  .nft tr.ndet.hide{display:none}
+  .ndt{width:100%;border-collapse:collapse;font-size:12.5px;color:var(--mut)}
+  .ndt td{border-bottom:1px dotted var(--line)!important;padding:5px 0!important;background:none!important;text-align:right}
+  .ndt td:first-child{text-align:left;color:var(--txt)}
+  .ndt td small{color:var(--mut2);margin-left:4px}
+  .ndt tr:last-child td{border-bottom:none!important}
+  .ndt td.sh{width:44px}
+  .ndt td.sh:last-child{width:76px}
   .nfhint{font-size:12px;color:var(--mut);margin:0 0 12px}
   .itadd{background:none;border:none;color:var(--acc);font-size:13px;font-weight:600;padding:8px 2px 12px;cursor:pointer}
   input[readonly]{opacity:.75}
@@ -943,15 +957,20 @@ const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items|
 const NUTR=[['Other',[['fiber_g','Fibre','g',28],['sugar_g','Sugars','g',100,1],['sat_fat_g','Saturated fat','g',20,1],['cholesterol_mg','Cholesterol','mg',300,1],['sodium_mg','Sodium','mg',2300,1]]],
   ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['vit_a_mcg','Vitamin A','mcg',900],['vit_c_mg','Vitamin C','mg',90],['vit_d_mcg','Vitamin D','mcg',20],['vit_b12_mcg','Vitamin B12','mcg',2.4]]]];
 const hasMicros=items=>(items||[]).some(it=>NUTR.some(g=>g[1].some(n=>it[n[0]]!=null)));
-function nutrFacts(items){
+function nutrFacts(items,OPEN){
   if(!hasMicros(items))return `<div class="nfhint">Tap <b>🤖 Re-do breakdown</b> to add fibre, sodium, vitamins &amp; minerals.</div>`;
   const tot=k=>(items||[]).reduce((a,it)=>a+(+it[k]||0),0);
   const fv=v=>v>=100?Math.round(v).toLocaleString():v>=10?Math.round(v):(Math.round(v*10)/10);
   return `<table class="nft">${NUTR.map(([grp,list])=>`<tr><th>${grp}</th><th>Amount</th><th>% Daily</th></tr>`+list.map(([k,lab,u,dv,lim])=>{const v=tot(k),pc=Math.round(v/dv*100);
-    return `<tr><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${pc}%<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>`}).join('')).join('')}</table>`;
+    const op=OPEN&&OPEN.has(k);
+    // who contributed: items sorted by amount, with share of the meal total and % of daily value
+    const contrib=(items||[]).map(it=>({n:it.name||'Item',q:it.qty||'',v:+it[k]||0})).sort((a,b)=>b.v-a.v);
+    const det=contrib.map(c=>`<tr><td>${esc(c.n)}${c.q?`<small>${esc(c.q)}</small>`:''}</td><td>${fv(c.v)} ${u}</td><td class="sh">${v?Math.round(c.v/v*100):0}%</td><td class="sh">${Math.round(c.v/dv*100)}% DV</td></tr>`).join('');
+    return `<tr class="nrow${op?' open':''}" data-nk="${k}"><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${pc}%<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>
+      <tr class="ndet${op?'':' hide'}"><td colspan="3"><table class="ndt"><tr><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">From</td><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Amount</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Share</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Daily</td></tr>${det}</table></td></tr>`}).join('')).join('')}</table>`;
 }
 function itemEditor(host,items,onChange){
-  const F=['calories','protein_g','carbs_g','fat_g'];
+  const F=['calories','protein_g','carbs_g','fat_g'];const OPEN=new Set();
   const r0=v=>Math.round(+v||0);
   function foot(){const t=itemSum(items);return `<td>Total</td><td class="kc">${r0(t.calories)}</td><td>${r0(t.protein_g)}</td><td>${r0(t.carbs_g)}</td><td>${r0(t.fat_g)}</td><td></td>`}
   function paint(){
@@ -966,11 +985,13 @@ function itemEditor(host,items,onChange){
         <td><button class="x" data-x="${i}" title="Remove">✕</button></td></tr>`).join('')}</tbody>
       <tfoot><tr>${foot()}</tr></tfoot></table>
       <button class="itadd" data-add="1">+ Add item</button>
-      <label class="fld" style="margin-top:4px">Nutrition — whole meal, per serving</label>${nutrFacts(items)}`;
+      <label class="fld" style="margin-top:4px">Nutrition — whole meal, per serving</label>${nutrFacts(items,OPEN)}`;
     host.querySelectorAll('input').forEach(el=>{el.onfocus=()=>el.select();el.oninput=()=>{const it=items[+el.dataset.i],k=el.dataset.k;
       if(k==='name'||k==='qty'){it[k]=el.value;return}const v=parseFloat(el.value);it[k]=isNaN(v)?0:v;
       host.querySelector('tfoot tr').innerHTML=foot();onChange(itemSum(items))}});
     host.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{items.splice(+b.dataset.x,1);paint()});
+    host.querySelectorAll('tr.nrow').forEach(r=>r.onclick=()=>{const k=r.dataset.nk;if(OPEN.has(k))OPEN.delete(k);else OPEN.add(k);
+      r.classList.toggle('open',OPEN.has(k));r.nextElementSibling.classList.toggle('hide',!OPEN.has(k))});
     host.querySelector('[data-add]').onclick=()=>{items.push({name:'',qty:'',calories:0,protein_g:0,carbs_g:0,fat_g:0});paint();const ins=host.querySelectorAll('.in');ins[ins.length-1].focus()};
     onChange(itemSum(items));
   }
