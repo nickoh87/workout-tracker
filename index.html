@@ -25,10 +25,11 @@
   html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
     -webkit-font-smoothing:antialiased}
-  body{padding-bottom:84px;max-width:600px;margin:0 auto;min-height:100vh}
+  :root{--navh:calc(62px + env(safe-area-inset-top))}
+  body{padding-top:var(--navh);padding-bottom:88px;max-width:600px;margin:0 auto;min-height:100vh}
   a{color:var(--acc)}
   .hide{display:none!important}
-  header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,var(--bg) 70%,transparent);
+  header{position:sticky;top:var(--navh);z-index:20;background:linear-gradient(180deg,var(--bg) 70%,transparent);
     padding:18px 18px 10px;display:flex;align-items:center;justify-content:space-between}
   header h1{font-size:20px;margin:0;font-weight:700;letter-spacing:-.3px}
   header .sub{color:var(--mut);font-size:12px;margin-top:2px}
@@ -57,9 +58,31 @@
     border-radius:10px;padding:11px 12px;font-size:16px;width:100%;outline:none}
   input:focus,select:focus{border-color:var(--acc)}
   label.fld{display:block;font-size:12px;color:var(--mut);margin:0 0 5px;font-weight:600}
-  nav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:rgba(16,21,34,.92);
-    backdrop-filter:blur(14px);border-top:1px solid var(--line);display:flex;max-width:600px;margin:0 auto;
-    padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  nav{position:fixed;top:0;left:0;right:0;z-index:30;background:rgba(16,21,34,.94);
+    backdrop-filter:blur(14px);border-bottom:1px solid var(--line);display:flex;max-width:600px;margin:0 auto;
+    padding:calc(6px + env(safe-area-inset-top)) 6px 6px}
+  .actbar{position:fixed;bottom:0;left:0;right:0;z-index:30;max-width:600px;margin:0 auto;display:flex;gap:8px;
+    background:rgba(16,21,34,.94);backdrop-filter:blur(14px);border-top:1px solid var(--line);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  .actbar .btn{margin:0;padding:13px 10px;font-size:15px}
+  .actbar .btn:first-child{flex:1.25}.actbar .btn:last-child{flex:1}
+  /* calendar */
+  .cal .cnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .cal .cnav button{background:var(--card2);border:1px solid var(--line);color:var(--txt);width:34px;height:34px;border-radius:10px;font-size:16px}
+  .cal .cnav .ct{font-weight:700;font-size:15px}
+  .cal .cg{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal .dw{font-size:10.5px;font-weight:700;color:var(--mut2);text-align:center;letter-spacing:.05em;padding-bottom:2px}
+  .cal .cd{background:var(--bg2);border:1px solid transparent;border-radius:10px;min-height:50px;padding:5px 2px 4px;
+    display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--txt);font:inherit}
+  .cal .cd.out{opacity:.28}
+  .cal .cd.today{border-color:var(--acc)}
+  .cal .cd .dn{font-size:13px;font-weight:650;line-height:1}
+  .cal .cd .dots{display:flex;gap:3px;height:6px}
+  .cal .cd .dots i{width:6px;height:6px;border-radius:50%;display:block}
+  .cal .cd .kc{font-size:9.5px;color:var(--mut);line-height:1;font-variant-numeric:tabular-nums}
+  .cal .lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--mut);margin-top:10px}
+  .cal .lg i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  .c-w{background:var(--acc)}.c-q{background:var(--warn)}.c-m{background:var(--good)}.c-b{background:#c78bff}
   nav button{flex:1;background:none;color:var(--mut2);display:flex;flex-direction:column;align-items:center;
     gap:3px;font-size:11px;font-weight:600;padding:5px 0}
   nav button.on{color:var(--acc)}
@@ -89,7 +112,7 @@
   .sp{justify-content:space-between}
   .muted{color:var(--mut)}
   .center{text-align:center}
-  .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--good);color:#06231a;
+  .toast{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--good);color:#06231a;
     padding:12px 20px;border-radius:12px;font-weight:700;font-size:14px;z-index:60;box-shadow:0 10px 30px -10px #000;
     animation:pop .3s ease}
   @keyframes pop{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
@@ -124,7 +147,7 @@
   .aset.done .ck{background:var(--good);border-color:var(--good)}
   .aset.done .ainfo{color:var(--mut);text-decoration:line-through}
   /* rest timer */
-  .restbar{position:fixed;left:50%;transform:translateX(-50%);bottom:92px;z-index:40;
+  .restbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:40;
     width:calc(100% - 28px);max-width:572px;display:flex;align-items:center;gap:12px;
     background:var(--card2);border:1px solid var(--acc2);border-radius:14px;padding:11px 14px;
     box-shadow:0 14px 34px -12px #000;animation:up .2s ease}
@@ -224,6 +247,10 @@
   <button data-tab="progress"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>Progress</button>
   <button data-tab="meals"><svg viewBox="0 0 24 24"><path d="M3 2v7a3 3 0 0 0 6 0V2"/><path d="M6 12v10"/><path d="M17 2c-2 2-3 5-3 8a3 3 0 0 0 3 3v9"/></svg>Meals</button>
 </nav>
+<div id="actbar" class="actbar hide">
+  <button class="btn" onclick="setTab('log')">+ Start a workout</button>
+  <button class="btn sec" onclick="quickLog()">⚡ Quick log</button>
+</div>
 <div id="rest" class="restbar hide">
   <div class="rtime" id="rtime">3:00</div>
   <div class="rlbl" id="rlbl">Rest</div>
@@ -297,8 +324,55 @@ async function lastFor(exId){
 
 let TAB='today';
 function setTab(t){TAB=t;document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  $('#actbar').classList.toggle('hide',t==='log');
   ({today:renderToday,log:renderLog,history:renderHistory,progress:renderProgress,meals:renderMeals})[t]();window.scrollTo(0,0)}
 
+// ---- month calendar on Today ----
+let CALM=todayISO().slice(0,7); // 'YYYY-MM'
+let CALDATA={};
+async function renderCal(){
+  const el=$('#cal');if(!el)return;
+  const [y,m]=CALM.split('-').map(Number);
+  const first=new Date(y,m-1,1),dow=(first.getDay()+6)%7;           // Monday-first
+  const start=addDays(first.toLocaleDateString('en-CA'),-dow),end=addDays(start,41);
+  const [{data:wks},{data:meals},{data:wis}]=await Promise.all([
+    sb.from('wt_workouts').select('id,date,name,kind').gte('date',start).lte('date',end),
+    sb.from('wt_meal_plan').select(RSEL).gte('date',start).lte('date',end),
+    sb.from('wt_weigh_ins').select('date,weight').gte('date',start).lte('date',end)]);
+  const D={};const g=d=>D[d]=D[d]||{w:[],q:[],kcal:0,meals:0,wt:null};
+  (wks||[]).forEach(w=>g(w.date)[w.kind==='quick'?'q':'w'].push(w));
+  (meals||[]).forEach(r=>{const x=g(r.date);x.kcal+=mealVals(r).kcal;x.meals++});
+  (wis||[]).forEach(r=>g(r.date).wt=r.weight);
+  CALDATA=D;
+  const today=todayISO();let cells='';
+  for(let i=0;i<42;i++){const d=addDays(start,i);const x=D[d]||{};const out=d.slice(0,7)!==CALM;
+    if(i===35&&out)break; // drop an all-next-month last row
+    cells+=`<button class="cd${out?' out':''}${d===today?' today':''}" onclick="calDay('${d}')"><span class="dn">${+d.slice(8)}</span>
+      <span class="dots">${x.w&&x.w.length?'<i class="c-w"></i>':''}${x.q&&x.q.length?'<i class="c-q"></i>':''}${x.meals?'<i class="c-m"></i>':''}${x.wt?'<i class="c-b"></i>':''}</span>
+      <span class="kc">${x.kcal?Math.round(x.kcal):''}</span></button>`}
+  const mname=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  el.innerHTML=`<div class="cnav"><button onclick="calMove(-1)">‹</button><div class="ct">${mname}</div><button onclick="calMove(1)">›</button></div>
+    <div class="cg">${['M','T','W','T','F','S','S'].map(w=>`<div class="dw">${w}</div>`).join('')}${cells}</div>
+    <div class="lg"><span><i class="c-w"></i>Workout</span><span><i class="c-q"></i>Quick log</span><span><i class="c-m"></i>Meals (kcal under date)</span><span><i class="c-b"></i>Weigh-in</span></div>`;
+}
+function calMove(n){const [y,m]=CALM.split('-').map(Number);const d=new Date(y,m-1+n,1);CALM=d.toLocaleDateString('en-CA').slice(0,7);renderCal()}
+function calDay(d){
+  const x=CALDATA[d]||{w:[],q:[],kcal:0,meals:0,wt:null};
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  const rows=[...(x.w||[]).map(w=>`<div class="exopt" style="cursor:pointer" data-w="${w.id}"><span><i class="c-w" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px"></i>${esc(w.name||'Workout')}</span><span class="muted">›</span></div>`),
+    ...(x.q||[]).map(w=>`<div class="exopt" style="cursor:pointer" data-w="${w.id}"><span><i class="c-q" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px"></i>Quick log</span><span class="muted">›</span></div>`),
+    x.meals?`<div class="exopt" style="cursor:pointer" data-m="1"><span><i class="c-m" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px"></i>Meals · ${x.meals} logged</span><span class="muted">${Math.round(x.kcal).toLocaleString()} kcal ›</span></div>`:'',
+    x.wt?`<div class="exopt"><span><i class="c-b" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px"></i>Weigh-in</span><span>${fmt(x.wt)} lb</span></div>`:''].filter(Boolean);
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:10px">${niceDate(d)} <span class="muted" style="font-weight:500;font-size:13px">${niceDateY(d)}</span></div>
+    ${rows.length?rows.join(''):'<div class="muted" style="padding:10px 0">Nothing logged this day.</div>'}
+    <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" id="cdm">+ Meal</button><button class="btn sec" id="cdq">⚡ Quick log</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelectorAll('[data-w]').forEach(r=>r.onclick=()=>{ov.remove();openWorkout(+r.dataset.w)});
+  const goMeals=()=>{ov.remove();MDAY=d;setTab('meals')};
+  ov.querySelectorAll('[data-m]').forEach(r=>r.onclick=goMeals);
+  ov.querySelector('#cdm').onclick=goMeals;
+  ov.querySelector('#cdq').onclick=()=>{ov.remove();quickLog(d)};
+}
 async function renderToday(){
   app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div></header>
     <div class="page"><div class="spin"></div></div>`;
@@ -323,9 +397,8 @@ async function renderToday(){
   app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div>
     <button class="btn ghost sm" onclick="lock()" title="Lock">🔒</button></header>
   <div class="page">
-    <button class="btn" onclick="setTab('log')" style="margin-bottom:10px">+ Start a workout</button>
-    <button class="btn sec" onclick="quickLog()" style="margin-bottom:16px">⚡ Quick log — just did something</button>
-    ${isStandalone()?'':`<button class="btn sec" onclick="installApp()" style="margin:-6px 0 16px">📲 Save as an app</button>`}
+    ${isStandalone()?'':`<button class="btn sec" onclick="installApp()" style="margin:0 0 14px">📲 Save as an app</button>`}
+    <div class="card cal" id="cal"><div class="spin" style="margin:20px auto"></div></div>
     <div class="grid2">
       <div class="stat"><div class="n">${weekCount}</div><div class="l">Workouts this week</div></div>
       <div class="stat"><div class="n">${daysSince==null?'–':daysSince===0?'Today':daysSince+'d'}</div><div class="l">Since last workout</div></div>
@@ -343,8 +416,9 @@ async function renderToday(){
     <div class="card"><div class="row sp"><h2 style="margin:0">Recent</h2><button class="btn ghost sm" onclick="setTab('history')">All →</button></div>
       <div id="recent" style="margin-top:12px"></div></div>
   </div>`;
+  renderCal();
   const rc=$('#recent');
-  if(!wks||!wks.length){rc.innerHTML='<div class="muted center">No workouts yet — tap “Start a workout”.</div>';return}
+  if(!wks||!wks.length){rc.innerHTML='<div class="muted center">No workouts yet — tap “Start a workout” below.</div>';return}
   for(const w of wks.slice(0,4)){
     const {data:s}=await sb.from('wt_sets').select('exercise_id,completed,reps,weight').eq('workout_id',w.id).order('set_number');
     const d=document.createElement('div');d.className='wk'+(w.kind==='quick'?' quick':'');d.style.cursor='pointer';
@@ -369,7 +443,7 @@ async function renderToday(){
 // ---- Quick log: one-off entry, no workout needed ----
 function qRecent(){try{return JSON.parse(localStorage.getItem('wt_qrecent')||'[]')}catch(e){return[]}}
 function qRemember(id){const r=qRecent().filter(x=>x!==id);r.unshift(id);localStorage.setItem('wt_qrecent',JSON.stringify(r.slice(0,8)))}
-function quickLog(){
+function quickLog(qd){qd=typeof qd==='string'&&qd<=todayISO()?qd:todayISO();
   let sel=null;
   const rec=qRecent().map(id=>exById(id)).filter(Boolean).slice(0,6);
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
@@ -392,7 +466,7 @@ function quickLog(){
         <div style="flex:1"><label class="fld" id="ql2">Weight (optional)</label><input id="qw" inputmode="decimal" placeholder="–"></div>
       </div>
       <label class="fld">Date</label>
-      <input id="qdate" type="date" value="${todayISO()}" max="${todayISO()}" style="margin-bottom:16px">
+      <input id="qdate" type="date" value="${qd}" max="${todayISO()}" style="margin-bottom:16px">
       <button class="btn" id="qsave">Log it</button>
     </div>
     <button class="btn ghost" id="qcancel" style="margin-top:8px">Cancel</button>
@@ -1240,7 +1314,7 @@ if('serviceWorker'in navigator){window.addEventListener('load',()=>navigator.ser
   try{await loadCore()}catch(e){
     const perm=/permission denied|row-level security|JWT/i.test(e.message||'');
     app.innerHTML=`<div class="page"><div class="card">${perm?'That account doesn\u2019t have access to the workout data.':'Couldn\u2019t connect to the database.'}<br><span class="muted">${e.message}</span><br><br><button class="btn ghost sm" onclick="lock()">Sign out</button></div></div>`;return}
-  $('#nav').classList.remove('hide');
+  $('#nav').classList.remove('hide');$('#actbar').classList.toggle('hide',TAB==='log');
   document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
   setTab('today');
 })();
