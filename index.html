@@ -1027,6 +1027,7 @@ async function renderMeals(){
         <div class="muted" style="font-size:12px;text-align:right">${Math.round(T.eaten).toLocaleString()} eaten<br>${tgt?(tgt-T.kcal>=0?Math.round(tgt-T.kcal)+' left':Math.round(T.kcal-tgt)+' over'):''}</div></div>
       ${tgt?`<div class="kbar"><div class="${T.kcal>tgt?'over':''}" style="width:${pct}%"></div></div>`:''}
       <div class="macros"><span>P <b>${Math.round(T.p)}g</b></span><span>C <b>${Math.round(T.c)}g</b></span><span>F <b>${Math.round(T.f)}g</b></span></div></div>`;
+  html+=dayNutrCard(today);
   for(const [key,label] of SLOTS){
     const list=today.filter(r=>r.slot===key);const st=dayTot(list);
     html+=`<div class="card slot"><div class="sh"><h2>${label}</h2><span class="skc">${list.length?Math.round(st.kcal)+' kcal':''}</span><button class="btn sec sm" onclick="addMeal('${key}')">+ Add</button></div>
@@ -1036,6 +1037,44 @@ async function renderMeals(){
         <div class="mk">${v.known?Math.round(v.kcal):'?'}<small> kcal</small></div></div>`}).join(''):'<div class="muted" style="font-size:13px">Nothing planned.</div>'}</div>`;
   }
   app.querySelector('.page').innerHTML=html;
+  app.querySelectorAll('.page tr.nrow').forEach(r=>r.onclick=()=>{const k=r.dataset.nk;if(DAY_OPEN.has(k))DAY_OPEN.delete(k);else DAY_OPEN.add(k);
+    r.classList.toggle('open',DAY_OPEN.has(k));r.nextElementSibling.classList.toggle('hide',!DAY_OPEN.has(k))});
+  backfillDay(today);
+}
+// ---- day vitamins & minerals vs daily requirement ----
+const DAY_OPEN=new Set(),BF=new Set();
+const dayNutrShown=()=>{try{return localStorage.getItem('wt_nutr_hide')!=='1'}catch(e){return true}};
+function toggleDayNutr(){try{localStorage.setItem('wt_nutr_hide',dayNutrShown()?'1':'0')}catch(e){}renderMeals()}
+// one pseudo-item per meal (its items x servings) so nutrFacts can show "which meal it came from"
+function dayNutrItems(list){
+  return list.map(r=>{const it=parseItems(r);if(!hasMicros(it))return null;const s=+r.servings||1;
+    const o={name:mealVals(r).name.length>38?mealVals(r).name.slice(0,36)+'…':mealVals(r).name,qty:(SLOTS.find(x=>x[0]===r.slot)||['',''])[1]};
+    NUTR.forEach(g=>g[1].forEach(n=>{o[n[0]]=it.reduce((a,x)=>a+(+x[n[0]]||0),0)*s}));return o}).filter(Boolean);
+}
+function dayNutrCard(list){
+  if(!list.length)return '';
+  const dn=dayNutrItems(list),miss=list.length-dn.length,open=dayNutrShown();
+  return `<div class="card"><div class="row sp" onclick="toggleDayNutr()" style="cursor:pointer"><h2 style="margin:0">Vitamins &amp; minerals</h2>
+      <span class="muted" style="font-size:12px">${miss?`<span class="spin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px;margin:0 6px 0 0;border-width:2px"></span>adding ${miss} meal${miss>1?'s':''}… `:''}${open?'▾':'▸'}</span></div>
+    ${open?`<div class="muted" style="font-size:12px;margin-top:4px">Today's total vs the daily requirement · tap a row to see which meal it came from</div>${dn.length?nutrFacts(dn,DAY_OPEN):''}`:''}</div>`;
+}
+// fill in vitamins/minerals automatically for any meal on the day that doesn't have them yet
+async function backfillDay(list){
+  const todo=list.filter(r=>!BF.has(r.id)&&!hasMicros(parseItems(r)));
+  if(!todo.length)return;todo.forEach(r=>BF.add(r.id));
+  const day=MDAY;
+  await Promise.all(todo.map(r=>fillMicros(r).catch(()=>{})));
+  if(MDAY===day&&TAB==='meals'&&!document.querySelector('.ovr'))renderMeals();
+}
+async function fillMicros(r){
+  const res=r.recipe_id?await estimateNutrition({recipe_id:r.recipe_id,items:true,save:false}):await estimateNutrition({text:r.custom_name||''});
+  const ni=res&&res.estimate&&res.estimate.items;if(!Array.isArray(ni)||!ni.length)return;
+  const old=parseItems(r);let items=ni;
+  // keep any breakdown you already have (and edited); just add the vitamin numbers to it
+  if(old&&old.length===ni.length)items=old.map((o,i)=>{const x={...o};NUTR.forEach(g=>g[1].forEach(n=>{x[n[0]]=ni[i][n[0]]}));return x});
+  const upd={notes:JSON.stringify(items)};
+  if(!r.recipe_id&&r.calories==null){const t=itemSum(items);Object.assign(upd,{calories:Math.round(t.calories),protein_g:Math.round(t.protein_g),carbs_g:Math.round(t.carbs_g),fat_g:Math.round(t.fat_g)})}
+  await sb.from('wt_meal_plan').update(upd).eq('id',r.id);
 }
 function setTarget(){
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
@@ -1075,7 +1114,8 @@ async function addMeal(slot){
     } else {
       body.innerHTML=`<label class="fld">What did you eat?</label>
         <input id="ctext" placeholder="e.g. 2 eggs, 2 toast with butter, coffee" style="margin-bottom:10px">
-        <button class="btn sec" id="cest" style="margin-bottom:12px">🤖 Estimate calories</button>
+        <button class="btn sec" id="cest" style="margin-bottom:6px">🤖 Estimate calories</button>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Or just hit Save — calories, the item breakdown and vitamins fill in automatically.</div>
         <div id="cerr" style="color:var(--bad);font-size:13px;min-height:14px;margin-bottom:6px"></div>
         <div id="cnote" class="muted" style="font-size:12px;margin-bottom:8px"></div>
         <div id="citems"></div>
