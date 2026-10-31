@@ -1029,18 +1029,22 @@ const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items|
 // editable item list; calls onChange(totals) whenever an item changes
 // extra nutrients per item (from the AI breakdown); dv = Canadian % Daily Value reference; lim = nutrient to limit
 const NUTR=[['Other',[['fiber_g','Fibre','g',28],['sugar_g','Sugars','g',100,1],['sat_fat_g','Saturated fat','g',20,1],['cholesterol_mg','Cholesterol','mg',300,1],['sodium_mg','Sodium','mg',2300,1]]],
-  ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['vit_a_mcg','Vitamin A','mcg',900],['vit_c_mg','Vitamin C','mg',90],['vit_d_mcg','Vitamin D','mcg',20],['vit_b12_mcg','Vitamin B12','mcg',2.4]]]];
+  ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['magnesium_mg','Magnesium','mg',420,0,1],
+    ['vit_a_mcg','Vitamin A','mcg',900],['thiamin_mg','Thiamine (B1)','mg',1.2,0,1],['riboflavin_mg','Riboflavin (B2)','mg',1.3,0,1],['niacin_mg','Niacin (B3)','mg',16,0,1],
+    ['pantothenic_mg','Pantothenic acid (B5)','mg',5,0,1],['vit_b6_mg','Vitamin B6','mg',1.7,0,1],['vit_b12_mcg','Vitamin B12','mcg',2.4],['folate_mcg','Folate','mcg',400,0,1],
+    ['biotin_mcg','Biotin','mcg',30,0,1],['vit_c_mg','Vitamin C','mg',90],['vit_d_mcg','Vitamin D','mcg',20],['vit_e_mg','Vitamin E','mg',15,0,1],['vit_k_mcg','Vitamin K','mcg',120,0,1],
+    ['omega3_mg','Omega-3 (EPA+DHA)','mg',0,0,1]]]];
 const hasMicros=items=>(items||[]).some(it=>NUTR.some(g=>g[1].some(n=>it[n[0]]!=null)));
 function nutrFacts(items,OPEN){
   if(!hasMicros(items))return `<div class="nfhint">Tap <b>🤖 Re-do breakdown</b> to add fibre, sodium, vitamins &amp; minerals.</div>`;
   const tot=k=>(items||[]).reduce((a,it)=>a+(+it[k]||0),0);
   const fv=v=>v>=100?Math.round(v).toLocaleString():v>=10?Math.round(v):(Math.round(v*10)/10);
-  return `<table class="nft">${NUTR.map(([grp,list])=>`<tr><th>${grp}</th><th>Amount</th><th>% Daily</th></tr>`+list.map(([k,lab,u,dv,lim])=>{const v=tot(k),pc=Math.round(v/dv*100);
+  return `<table class="nft">${NUTR.map(([grp,list])=>`<tr><th>${grp}</th><th>Amount</th><th>% Daily</th></tr>`+list.filter(n=>!n[5]||tot(n[0])>0).map(([k,lab,u,dv,lim])=>{const v=tot(k),pc=dv?Math.round(v/dv*100):0;
     const op=OPEN&&OPEN.has(k);
     // who contributed: items sorted by amount, with share of the meal total and % of daily value
     const contrib=(items||[]).map(it=>({n:it.name||'Item',q:it.qty||'',v:+it[k]||0})).sort((a,b)=>b.v-a.v);
-    const det=contrib.map(c=>`<tr><td>${esc(c.n)}${c.q?`<small>${esc(c.q)}</small>`:''}</td><td>${fv(c.v)} ${u}</td><td class="sh">${v?Math.round(c.v/v*100):0}%</td><td class="sh">${Math.round(c.v/dv*100)}% DV</td></tr>`).join('');
-    return `<tr class="nrow${op?' open':''}" data-nk="${k}"><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${pc}%<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>
+    const det=contrib.map(c=>`<tr><td>${esc(c.n)}${c.q?`<small>${esc(c.q)}</small>`:''}</td><td>${fv(c.v)} ${u}</td><td class="sh">${v?Math.round(c.v/v*100):0}%</td><td class="sh">${dv?Math.round(c.v/dv*100)+'% DV':'–'}</td></tr>`).join('');
+    return `<tr class="nrow${op?' open':''}" data-nk="${k}"><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${dv?pc+'%':'–'}<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>
       <tr class="ndet${op?'':' hide'}"><td colspan="3"><table class="ndt"><tr><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">From</td><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Amount</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Share</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Daily</td></tr>${det}</table></td></tr>`}).join('')).join('')}</table>`;
 }
 function itemEditor(host,items,onChange){
@@ -1085,7 +1089,7 @@ async function renderMeals(){
   // week strip: Mon..Sun around MDAY
   const [y,m,d]=MDAY.split('-');const dt=new Date(y,m-1,d);const dow=(dt.getDay()+6)%7;
   const wk0=addDays(MDAY,-dow),wk6=addDays(wk0,6);
-  const {data:rows,error}=await sb.from('wt_meal_plan').select(RSEL).gte('date',wk0).lte('date',wk6).order('id');
+  const [{data:rows,error},PL]=await Promise.all([sb.from('wt_meal_plan').select(RSEL).gte('date',wk0).lte('date',wk6).order('id'),loadPills(MDAY)]);
   if(error){app.querySelector('.page').innerHTML=`<div class="card">${esc(error.message)}</div>`;return}
   const byDay={};(rows||[]).forEach(r=>{(byDay[r.date]=byDay[r.date]||[]).push(r)});
   const dayTot=list=>{const t={kcal:0,p:0,c:0,f:0,eaten:0};(list||[]).forEach(r=>{const v=mealVals(r);t.kcal+=v.kcal;t.p+=v.p;t.c+=v.c;t.f+=v.f;if(r.eaten)t.eaten+=v.kcal});return t};
@@ -1101,7 +1105,8 @@ async function renderMeals(){
         <div class="muted" style="font-size:12px;text-align:right">${Math.round(T.eaten).toLocaleString()} eaten<br>${tgt?(tgt-T.kcal>=0?Math.round(tgt-T.kcal)+' left':Math.round(T.kcal-tgt)+' over'):''}</div></div>
       ${tgt?`<div class="kbar"><div class="${T.kcal>tgt?'over':''}" style="width:${pct}%"></div></div>`:''}
       <div class="macros"><span>P <b>${Math.round(T.p)}g</b></span><span>C <b>${Math.round(T.c)}g</b></span><span>F <b>${Math.round(T.f)}g</b></span></div></div>`;
-  html+=dayNutrCard(today);
+  html+=dayNutrCard(today,pillItems(PL));
+  html+=pillsCard(PL);
   for(const [key,label] of SLOTS){
     const list=today.filter(r=>r.slot===key);const st=dayTot(list);
     html+=`<div class="card slot"><div class="sh"><h2>${label}</h2><span class="skc">${list.length?Math.round(st.kcal)+' kcal':''}</span><button class="btn sec sm" onclick="addMeal('${key}')">+ Add</button></div>
@@ -1125,12 +1130,77 @@ function dayNutrItems(list){
     const o={name:mealVals(r).name.length>38?mealVals(r).name.slice(0,36)+'…':mealVals(r).name,qty:(SLOTS.find(x=>x[0]===r.slot)||['',''])[1]};
     NUTR.forEach(g=>g[1].forEach(n=>{o[n[0]]=it.reduce((a,x)=>a+(+x[n[0]]||0),0)*s}));return o}).filter(Boolean);
 }
-function dayNutrCard(list){
-  if(!list.length)return '';
-  const dn=dayNutrItems(list),miss=list.length-dn.length,open=dayNutrShown();
+function dayNutrCard(list,pills){
+  pills=pills||[];
+  if(!list.length&&!pills.length)return '';
+  const dm=dayNutrItems(list),miss=list.length-dm.length,open=dayNutrShown(),dn=dm.concat(pills);
   return `<div class="card"><div class="row sp" onclick="toggleDayNutr()" style="cursor:pointer"><h2 style="margin:0">Vitamins &amp; minerals</h2>
       <span class="muted" style="font-size:12px">${miss?`<span class="spin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px;margin:0 6px 0 0;border-width:2px"></span>adding ${miss} meal${miss>1?'s':''}… `:''}${open?'▾':'▸'}</span></div>
-    ${open?`<div class="muted" style="font-size:12px;margin-top:4px">Today's total vs the daily requirement · tap a row to see which meal it came from</div>${dn.length?nutrFacts(dn,DAY_OPEN):''}`:''}</div>`;
+    ${open?`<div class="muted" style="font-size:12px;margin-top:4px">Today's total vs the daily requirement · ${pills.length?'food + pills · ':''}tap a row to see which meal or pill it came from</div>${dn.length?nutrFacts(dn,DAY_OPEN):''}`:''}</div>`;
+}
+// ---- 💊 pills / supplements: wt_supplements (per_unit = amounts in ONE pill, NUTR keys) + wt_supplement_log (per-day override; qty 0 = skipped) ----
+// a pill counts every day from start_date at daily_qty unless that day has a log row
+async function loadPills(day){
+  const [a,b]=await Promise.all([sb.from('wt_supplements').select('*').eq('active',true).lte('start_date',day).order('sort').order('id'),
+    sb.from('wt_supplement_log').select('supplement_id,qty').eq('date',day)]);
+  if(a.error){console.warn('pills',a.error.message);return []}
+  const lg={};(b.data||[]).forEach(r=>lg[r.supplement_id]=+r.qty);
+  return (a.data||[]).map(p=>({...p,qty:lg[p.id]!=null?lg[p.id]:+p.daily_qty,logged:lg[p.id]!=null}));
+}
+const plur=(n,u)=>`${fmt(n)} ${+n===1?u:(/[^aeiou]y$/.test(u)?u.slice(0,-1)+'ies':u+'s')}`;
+function pillItems(PL){
+  return (PL||[]).filter(p=>p.qty>0).map(p=>{const o={name:'💊 '+p.name,qty:plur(p.qty,p.unit)};const pu=p.per_unit||{};
+    for(const k in pu)o[k]=(+pu[k]||0)*p.qty;return o});
+}
+function pillsCard(PL){
+  return `<div class="card slot"><div class="sh"><h2>💊 Pills</h2><span class="skc">${PL.length?PL.filter(p=>p.qty>0).length+' of '+PL.length+' taken':''}</span><button class="btn sec sm" onclick="editPill()">+ Add</button></div>
+    ${PL.length?PL.map(p=>`<div class="meal ${p.qty>0?'eaten':''}" onclick="editPill(${p.id})">
+      <div class="ck" onclick="event.stopPropagation();togglePill(${p.id},${p.qty>0?0:1})">${p.qty>0?'✓':''}</div>
+      <div class="mn">${esc(p.name)}<small>${p.qty>0?plur(p.qty,p.unit):'skipped'}${p.brand?' · '+esc(p.brand):''}</small></div>
+      <div class="mk">${pillSummary(p)}</div></div>`).join(''):'<div class="muted" style="font-size:13px">No pills yet.</div>'}
+    <div class="muted" style="font-size:12px;margin-top:8px">Pills count every day automatically — tap the circle on a day you skip one.</div></div>`;
+}
+// short "what's in it" for the row: the nutrients when 3 or fewer, else a count
+function pillSummary(p){
+  const pu=p.per_unit||{},q=p.qty||+p.daily_qty||1,all=NUTR[1][1].filter(n=>pu[n[0]]);
+  if(all.length>3)return `<small>${all.length} nutrients</small>`;
+  return all.map(n=>`<small style="display:block;text-align:right">${fmtN(pu[n[0]]*q)} ${n[2]} ${n[1].replace(/ \(.*/,'')}</small>`).join('');
+}
+const fmtN=v=>v>=100?Math.round(v).toLocaleString():Math.round(v*10)/10;
+async function togglePill(id,on){
+  const p=(await loadPills(MDAY)).find(x=>x.id===id);if(!p)return;
+  // back to the normal amount = no log row; skipped = qty 0
+  const r=on?await sb.from('wt_supplement_log').delete().eq('date',MDAY).eq('supplement_id',id)
+            :await sb.from('wt_supplement_log').upsert({date:MDAY,supplement_id:id,qty:0},{onConflict:'date,supplement_id'});
+  if(r.error)toast(r.error.message);renderMeals();
+}
+async function editPill(id){
+  let p={name:'',brand:'',unit:'pill',daily_qty:1,per_unit:{},label_notes:''};
+  if(id){const {data,error}=await sb.from('wt_supplements').select('*').eq('id',id).single();if(error)return toast(error.message);p=data}
+  const L=NUTR[1][1];
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:14px">${id?'Edit pill':'Add a pill'}</div>
+    <label class="fld">Name</label><input id="pn" value="${esc(p.name)}" placeholder="e.g. Vitamin D3 1,000 IU" style="margin-bottom:10px">
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <div style="flex:1"><label class="fld">How many a day</label><input id="pq" inputmode="decimal" value="${fmt(p.daily_qty)}"></div>
+      <div style="flex:1"><label class="fld">Unit</label><input id="pu" value="${esc(p.unit)}" placeholder="pill"></div>
+      <div style="flex:1"><label class="fld">Brand</label><input id="pb" value="${esc(p.brand||'')}"></div></div>
+    <label class="fld">Amount in ONE ${esc(p.unit||'pill')} (from the label — leave blank if not in it)</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin-bottom:10px">${L.map(n=>`<div><label class="fld" style="margin:0 0 2px;font-weight:500">${n[1]} <span style="color:var(--mut2)">${n[2]}</span></label>
+      <input data-k="${n[0]}" inputmode="decimal" value="${p.per_unit&&p.per_unit[n[0]]!=null?p.per_unit[n[0]]:''}"></div>`).join('')}</div>
+    ${p.label_notes?`<div class="muted" style="font-size:12px;margin-bottom:10px">${esc(p.label_notes)}</div>`:''}
+    <button class="btn" id="ps">Save</button>${id?'<button class="btn danger" id="pd" style="margin-top:8px">Remove pill</button>':''}</div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#ps').onclick=async()=>{
+    const pu={};ov.querySelectorAll('[data-k]').forEach(el=>{const v=parseFloat(el.value);if(!isNaN(v)&&v>0)pu[el.dataset.k]=v});
+    const row={name:ov.querySelector('#pn').value.trim(),brand:ov.querySelector('#pb').value.trim()||null,unit:ov.querySelector('#pu').value.trim()||'pill',
+      daily_qty:parseFloat(ov.querySelector('#pq').value)||1,per_unit:pu};
+    if(!row.name)return toast('Give it a name');
+    if(!id)row.start_date=MDAY;
+    const r=id?await sb.from('wt_supplements').update(row).eq('id',id):await sb.from('wt_supplements').insert(row);
+    if(r.error)return toast(r.error.message);ov.remove();renderMeals();
+  };
+  if(id)ov.querySelector('#pd').onclick=async()=>{const r=await sb.from('wt_supplements').update({active:false}).eq('id',id);if(r.error)return toast(r.error.message);ov.remove();renderMeals()};
 }
 // fill in vitamins/minerals automatically for any meal on the day that doesn't have them yet
 async function backfillDay(list){
