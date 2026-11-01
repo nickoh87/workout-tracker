@@ -171,6 +171,9 @@
   .kbar{height:8px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:8px 0 6px}
   .kbar>div{height:100%;background:var(--acc);width:0;transition:width .25s}
   .kbar>div.over{background:var(--bad)}
+  .kbar.water>div{background:#38bdf8}
+  .wbtns{display:flex;gap:8px;margin-top:10px}
+  .wbtns button{flex:1;padding:9px 6px;font-size:13px}
   .macros{display:flex;gap:14px;font-size:12.5px;color:var(--mut)}
   .macros b{color:var(--txt)}
   .slot{margin-bottom:14px}
@@ -1090,7 +1093,8 @@ async function renderMeals(){
   // week strip: Mon..Sun around MDAY
   const [y,m,d]=MDAY.split('-');const dt=new Date(y,m-1,d);const dow=(dt.getDay()+6)%7;
   const wk0=addDays(MDAY,-dow),wk6=addDays(wk0,6);
-  const [{data:rows,error},PL]=await Promise.all([sb.from('wt_meal_plan').select(RSEL).gte('date',wk0).lte('date',wk6).order('id'),loadPills(MDAY)]);
+  const [{data:rows,error},PL,WT]=await Promise.all([sb.from('wt_meal_plan').select(RSEL).gte('date',wk0).lte('date',wk6).order('id'),loadPills(MDAY),
+    sb.from('wt_water').select('id,ml,created_at').eq('date',MDAY).order('id')]);
   if(error){app.querySelector('.page').innerHTML=`<div class="card">${esc(error.message)}</div>`;return}
   const byDay={};(rows||[]).forEach(r=>{(byDay[r.date]=byDay[r.date]||[]).push(r)});
   const dayTot=list=>{const t={kcal:0,p:0,c:0,f:0,eaten:0};(list||[]).forEach(r=>{const v=mealVals(r);t.kcal+=v.kcal;t.p+=v.p;t.c+=v.c;t.f+=v.f;if(r.eaten)t.eaten+=v.kcal});return t};
@@ -1106,6 +1110,7 @@ async function renderMeals(){
         <div class="muted" style="font-size:12px;text-align:right">${Math.round(T.eaten).toLocaleString()} eaten<br>${tgt?(tgt-T.kcal>=0?Math.round(tgt-T.kcal)+' left':Math.round(T.kcal-tgt)+' over'):''}</div></div>
       ${tgt?`<div class="kbar"><div class="${T.kcal>tgt?'over':''}" style="width:${pct}%"></div></div>`:''}
       <div class="macros"><span>P <b>${Math.round(T.p)}g</b></span><span>C <b>${Math.round(T.c)}g</b></span><span>F <b>${Math.round(T.f)}g</b></span></div></div>`;
+  html+=waterCard((WT&&WT.data)||[]);
   html+=dayNutrCard(today,pillItems(PL));
   html+=pillsCard(PL);
   for(const [key,label] of SLOTS){
@@ -1120,6 +1125,45 @@ async function renderMeals(){
   app.querySelectorAll('.page tr.nrow').forEach(r=>r.onclick=()=>{const k=r.dataset.nk;if(DAY_OPEN.has(k))DAY_OPEN.delete(k);else DAY_OPEN.add(k);
     r.classList.toggle('open',DAY_OPEN.has(k));r.nextElementSibling.classList.toggle('hide',!DAY_OPEN.has(k))});
   backfillDay(today);
+}
+// ---- 💧 water: wt_water rows (date, ml); goal in localStorage.wt_water_goal (ml, default 3000) ----
+const waterGoal=()=>{try{return +(localStorage.getItem('wt_water_goal')||3000)}catch(e){return 3000}};
+const fmtL=ml=>(Math.round(ml/50)*50/1000).toLocaleString(undefined,{maximumFractionDigits:2})+' L';
+function waterCard(list){
+  const tot=list.reduce((a,r)=>a+(+r.ml||0),0),g=waterGoal(),pct=Math.min(100,Math.round(tot/g*100));
+  const last=list.length?new Date(list[list.length-1].created_at).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+  return `<div class="card"><div class="row sp"><div><span style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">💧 Water</span>
+      <div style="margin-top:4px"><span style="font-size:24px;font-weight:750">${fmtL(tot)}</span><span style="font-size:13px;color:var(--mut)"> / ${fmtL(g)}</span></div></div>
+      <div class="muted" style="font-size:12px;text-align:right;cursor:pointer" onclick="setWaterGoal()">${tot>=g?'✓ goal reached':fmtL(g-tot)+' to go'}<br><span style="text-decoration:underline">🎯 goal</span></div></div>
+    <div class="kbar water"><div style="width:${pct}%"></div></div>
+    <div class="muted" style="font-size:12px">${list.length?list.length+' drink'+(list.length>1?'s':'')+' · last at '+last:'Nothing yet today'}</div>
+    <div class="wbtns"><button class="btn sec" onclick="addWater(250)">+ Glass<br><small style="font-weight:500;color:var(--mut)">250 ml</small></button>
+      <button class="btn sec" onclick="addWater(500)">+ Bottle<br><small style="font-weight:500;color:var(--mut)">500 ml</small></button>
+      <button class="btn sec" onclick="otherWater()">+ Other</button>
+      ${list.length?`<button class="btn ghost" onclick="undoWater(${list[list.length-1].id})" title="Remove the last drink" style="flex:0 0 auto;padding:9px 12px">↶</button>`:''}</div></div>`;
+}
+async function addWater(ml){
+  const {error}=await sb.from('wt_water').insert({date:MDAY,ml});if(error)return toast(error.message);
+  toast('💧 +'+ml+' ml');renderMeals();
+}
+async function undoWater(id){const {error}=await sb.from('wt_water').delete().eq('id',id);if(error)return toast(error.message);toast('Removed');renderMeals()}
+function otherWater(){
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:14px">💧 Add water</div>
+    <input id="wml" inputmode="numeric" placeholder="ml, e.g. 750" style="margin-bottom:10px">
+    <div style="display:flex;gap:8px;margin-bottom:12px">${[330,750,1000].map(v=>`<button class="chip" data-v="${v}">${v} ml</button>`).join('')}</div>
+    <button class="btn" id="wok">Add</button></div>`;
+  document.body.appendChild(ov);const inp=ov.querySelector('#wml');setTimeout(()=>inp.focus(),50);
+  ov.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>{inp.value=b.dataset.v});
+  ov.querySelector('#wok').onclick=()=>{const v=parseInt(inp.value);if(!(v>0&&v<=5000))return toast('Enter ml between 1 and 5000');ov.remove();addWater(v)};
+}
+function setWaterGoal(){
+  const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
+  ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:6px">Daily water goal</div>
+    <div class="muted" style="font-size:12px;margin-bottom:12px">In litres. 3 L is a common target for drinks; more on workout days.</div>
+    <input id="wg" inputmode="decimal" value="${waterGoal()/1000}" style="margin-bottom:12px"><button class="btn" id="wgs">Save</button></div>`;
+  document.body.appendChild(ov);const inp=ov.querySelector('#wg');setTimeout(()=>inp.focus(),50);
+  ov.querySelector('#wgs').onclick=()=>{const v=parseFloat(inp.value);if(v>0&&v<10){try{localStorage.setItem('wt_water_goal',Math.round(v*1000))}catch(e){}}ov.remove();renderMeals()};
 }
 // ---- day vitamins & minerals vs daily requirement ----
 const DAY_OPEN=new Set(),BF=new Set();
@@ -1250,14 +1294,47 @@ async function addMeal(slot){
   ov.innerHTML=`<div class="sheet">
     <div class="row sp" style="margin-bottom:10px"><div style="font-size:17px;font-weight:750">Add to ${SLOTS.find(s=>s[0]===slot)[1]}</div>
       <select id="mslot" style="width:auto;padding:8px 10px;font-size:13px">${SLOTS.map(s=>`<option value="${s[0]}" ${s[0]===slot?'selected':''}>${s[1]}</option>`).join('')}</select></div>
-    <div class="seg"><button data-m="recipe" class="on">From my recipes</button><button data-m="snap">📷 Snap</button><button data-m="custom">Type it in</button></div>
+    <div class="seg"><button data-m="mine" class="on">⭐ Mine</button><button data-m="recipe">Recipes</button><button data-m="snap">📷 Snap</button><button data-m="custom">Type it</button></div>
     <div id="mbody"><div class="spin"></div></div></div>`;
   document.body.appendChild(ov);
-  const body=ov.querySelector('#mbody');let mode='recipe';
+  const body=ov.querySelector('#mbody');let mode='mine';
   ov.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{mode=b.dataset.m;ov.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x===b));draw()});
   const curSlot=()=>ov.querySelector('#mslot').value;
   const setMode=m=>{mode=m;ov.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x.dataset.m===m))};
   async function draw(pre){
+    if(mode==='mine'){
+      // ⭐ saved meals (wt_saved_meals) + recent history (last 60 days of wt_meal_plan, one row per distinct meal)
+      const [sv,rc]=await Promise.all([sb.from('wt_saved_meals').select('*').order('last_used',{ascending:false,nullsFirst:false}).order('id',{ascending:false}),
+        sb.from('wt_meal_plan').select(RSEL).gte('date',addDays(todayISO(),-60)).order('date',{ascending:false}).order('id',{ascending:false}).limit(400)]);
+      if(mode!=='mine')return;
+      const key=x=>x.recipe_id?'r:'+x.recipe_id:'c:'+String(x.custom_name||x.name||'').toLowerCase().trim();
+      const saved=(sv.data||[]).map(x=>({...x,_k:key(x)}));const sk=new Set(saved.map(x=>x._k));
+      const seen=new Set(),recent=[];(rc.data||[]).forEach(r=>{const k=key(r);if(seen.has(k)||sk.has(k))return;seen.add(k);recent.push(r)});
+      const slotLab=k=>(SLOTS.find(x=>x[0]===k)||['',''])[1];
+      const row=(o,kind)=>{const kc=kind==='s'?(o.calories!=null?Math.round(o.calories*(+o.servings||1)):null):(mealVals(o).known?Math.round(mealVals(o).kcal):null);
+        const nm=kind==='s'?o.name:mealVals(o).name;const it=parseItems(o);
+        const sub=kind==='s'?[o.slot?slotLab(o.slot):'',o.recipe_id?'recipe':'',it?it.length+' items':''].filter(Boolean).join(' · ')
+          :['last '+(o.date===todayISO()?'today':niceDate(o.date)),slotLab(o.slot)].filter(Boolean).join(' · ');
+        return `<div class="ropt" data-k="${kind}" data-id="${o.id}" data-q="${esc(nm.toLowerCase())}"><div class="rn">${esc(nm)}<small>${sub}</small></div>
+          <div class="rk ${kc!=null?'':'none'}">${kc!=null?kc+' kcal':'–'}</div>
+          <button class="x mstar" data-${kind==='s'?'del':'save'}="${o.id}" title="${kind==='s'?'Remove from My meals':'Save to My meals'}" style="background:none;border:none;color:var(--mut);font-size:${kind==='s'?14:17}px;padding:4px 2px 4px 10px;cursor:pointer">${kind==='s'?'✕':'☆'}</button></div>`};
+      body.innerHTML=`<div class="search"><input id="mq" placeholder="Search your meals…"></div>
+        ${saved.length?`<label class="fld" style="margin-top:4px">⭐ My meals</label>${saved.map(o=>row(o,'s')).join('')}`:''}
+        <label class="fld" style="margin-top:12px">Recent</label>
+        ${recent.length?recent.slice(0,30).map(o=>row(o,'r')).join(''):'<div class="muted" style="font-size:13px;padding:8px 0">Nothing logged in the last 60 days yet.</div>'}
+        ${saved.length?'':'<div class="muted" style="font-size:12px;margin-top:10px">Tap ☆ on a meal you eat often to keep it at the top.</div>'}`;
+      body.querySelector('#mq').oninput=e=>{const q=e.target.value.toLowerCase().trim();body.querySelectorAll('.ropt').forEach(el=>el.style.display=!q||el.dataset.q.includes(q)?'':'none')};
+      body.querySelectorAll('[data-save]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const r=recent.find(x=>x.id==b.dataset.save);if(await saveToMyMeals(r))draw()});
+      body.querySelectorAll('[data-del]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const {error}=await sb.from('wt_saved_meals').delete().eq('id',b.dataset.del);if(error)toast(error.message);else{toast('Removed from My meals');draw()}});
+      body.querySelectorAll('.ropt').forEach(el=>el.onclick=async()=>{
+        const o=el.dataset.k==='s'?saved.find(x=>x.id==el.dataset.id):recent.find(x=>x.id==el.dataset.id);if(!o)return;
+        const sid=el.dataset.k==='s'?o.id:null;
+        if(o.recipe_id){const recs=await loadRecipes();const r=recs.find(x=>x.id===o.recipe_id);if(r){setMode('recipe');pickRecipe(r,o.servings,sid,true);return}}
+        const n=el.dataset.k==='s'?o:(()=>{const v=mealVals(o),sv=+o.servings||1;return {calories:v.known?v.kcal/sv:null,protein_g:v.p/sv,carbs_g:v.c/sv,fat_g:v.f/sv}})();
+        setMode('custom');draw({e:{meal_name:el.dataset.k==='s'?o.name:o.custom_name,calories:n.calories,protein_g:n.protein_g,carbs_g:n.carbs_g,fat_g:n.fat_g,items:parseItems(o)||[],notes:''},servings:o.servings,savedId:sid});
+      });
+      return;
+    }
     if(mode==='snap'){
       // one camera button: barcode in the photo -> product lookup; otherwise the AI reads the label/package or identifies the food
       body.innerHTML=`<button class="btn" id="snapcam">📷 Take a photo</button>
@@ -1305,12 +1382,13 @@ async function addMeal(slot){
         <div class="g4" style="margin-bottom:10px"><input id="ck" inputmode="numeric" placeholder="kcal"><input id="cp" inputmode="numeric" placeholder="P"><input id="cc" inputmode="numeric" placeholder="C"><input id="cf" inputmode="numeric" placeholder="F"></div>
         <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="cs" inputmode="decimal" value="1"></div>
           <div style="flex:1"><label class="fld">Date</label><input id="cd" type="date" value="${MDAY}"></div></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="ceat" checked style="width:auto"> Already eaten</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:8px"><input type="checkbox" id="ceat" checked style="width:auto"> Already eaten</label>
+        <label id="cmine" style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="cstar" style="width:auto"> ⭐ Save to My meals</label>
         <button class="btn" id="csave">Save</button>`;
       const $q=s=>body.querySelector(s);if(!pre)setTimeout(()=>$q('#ctext').focus(),50);
       let citems=[];
       const setTot=t=>{['#ck','#cp','#cc','#cf'].forEach(id=>$q(id).readOnly=!!t);{const g=$q('#ck').closest('.g4');g.style.display=t?'none':'';if(g.previousElementSibling)g.previousElementSibling.style.display=t?'none':''}if(t){$q('#ck').value=Math.round(t.calories);$q('#cp').value=Math.round(t.protein_g);$q('#cc').value=Math.round(t.carbs_g);$q('#cf').value=Math.round(t.fat_g)}};
-      const apply=e=>{$q('#ck').value=Math.round(e.calories);$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
+      const apply=e=>{$q('#ck').value=e.calories!=null?Math.round(e.calories):'';$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
         $q('#cnote').textContent=(e.kind==='barcode'?'🔎 From barcode '+(e.barcode||'')+' · ':e.kind==='label'?'🏷️ Read from the label · ':e.kind==='food'?'📷 Estimated from the photo · ':'')+(e.notes||'');
         // nothing has more than ~9 kcal per gram (pure fat): if it does, the serving size was misread
         if(e.label&&e.label.serving_g>0&&e.calories/e.label.serving_g>9.2)$q('#cnote').innerHTML=`<span style="color:var(--bad)">⚠️ The serving size looks misread (${Math.round(e.calories)} kcal can't fit in ${e.label.serving_g} g) — check the label and fix the amount.</span> `+esc($q('#cnote').textContent);
@@ -1320,6 +1398,8 @@ async function addMeal(slot){
         const r=await estimateNutrition({text:t});b.disabled=false;b.textContent='🤖 Estimate calories';
         if(r.error){$q('#cerr').textContent=r.error;return}
         apply(r.estimate)};
+      if(pre&&pre.servings)$q('#cs').value=fmt(pre.servings);
+      if(pre&&pre.savedId)$q('#cmine').style.display='none';
       if(pre&&pre.e){$q('#ctext').value=pre.e.meal_name||'';apply(pre.e);
         if(pre.url)$q('#ctext').previousElementSibling.insertAdjacentHTML('beforebegin',`<img src="${pre.url}" alt="" style="width:100%;max-height:160px;object-fit:contain;border-radius:12px;margin-bottom:10px;background:var(--bg)">`)}
       $q('#csave').onclick=async()=>{const name=$q('#ctext').value.trim();const kcal=parseFloat($q('#ck').value);
@@ -1328,28 +1408,31 @@ async function addMeal(slot){
           calories:isNaN(kcal)?null:kcal,protein_g:parseFloat($q('#cp').value)||null,carbs_g:parseFloat($q('#cc').value)||null,fat_g:parseFloat($q('#cf').value)||null,
           notes:citems.length?JSON.stringify(citems):null};
         const {error}=await sb.from('wt_meal_plan').insert(row);if(error){$q('#cerr').textContent=error.message;return}
+        if(pre&&pre.savedId)await sb.from('wt_saved_meals').update({last_used:row.date}).eq('id',pre.savedId);
+        else if($q('#cstar').checked)await saveToMyMeals(row);
         ov.remove();toast('Meal added');MDAY=row.date;renderMeals()};
     }
   }
-  async function pickRecipe(r){
+  async function pickRecipe(r,servings,savedId,fromMine){
     body.innerHTML=`<div style="font-size:16px;font-weight:700;margin-bottom:4px">${esc(r.name)}</div>
       <div class="muted" style="font-size:12px;margin-bottom:12px">${esc(r.category||'')}${r.servings?' · recipe makes '+esc(r.servings):''}</div>
       <div id="rn" class="card" style="padding:12px">${r.n?`<div style="font-size:22px;font-weight:750">${Math.round(r.n.calories)}<span style="font-size:12px;color:var(--mut)"> kcal / serving</span></div>
         <div class="macros" style="margin-top:4px"><span>P <b>${Math.round(r.n.protein_g||0)}g</b></span><span>C <b>${Math.round(r.n.carbs_g||0)}g</b></span><span>F <b>${Math.round(r.n.fat_g||0)}g</b></span></div>
         ${r.n.notes?`<div class="muted" style="font-size:12px;margin-top:6px">${esc(r.n.notes)}</div>`:''}`:`<div class="muted" style="font-size:13px;margin-bottom:8px">No calorie estimate yet.</div>`}
         <button class="btn sec sm" id="rest" style="margin-top:8px">🤖 ${r.n?'Re-estimate':'Estimate with AI'}</button><div id="rerr" style="color:var(--bad);font-size:13px;margin-top:6px"></div></div>
-      <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="rs" inputmode="decimal" value="1"></div>
+      <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Servings</label><input id="rs" inputmode="decimal" value="${fmt(servings||1)}"></div>
         <div style="flex:1"><label class="fld">Date</label><input id="rd" type="date" value="${MDAY}"></div></div>
       <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="reat" style="width:auto"> Already eaten</label>
       <button class="btn" id="rsave">Add to plan</button><button class="btn ghost" id="rback" style="margin-top:8px">← Back</button>`;
     const $q=s=>body.querySelector(s);
-    $q('#rback').onclick=draw;
+    $q('#rback').onclick=()=>{if(fromMine)setMode('mine');draw()};
     $q('#rest').onclick=async()=>{const b=$q('#rest');b.disabled=true;b.textContent='Estimating…';$q('#rerr').textContent='';
       const res=await estimateNutrition({recipe_id:r.id});
       if(res.error){b.disabled=false;b.textContent='🤖 Try again';$q('#rerr').textContent=res.error;return}
       await loadRecipes(true);pickRecipe(DB.recipes.find(x=>x.id===r.id))};
     $q('#rsave').onclick=async()=>{const row={date:$q('#rd').value||MDAY,slot:curSlot(),recipe_id:r.id,servings:parseFloat($q('#rs').value)||1,eaten:$q('#reat').checked};
       const {error}=await sb.from('wt_meal_plan').insert(row);if(error){$q('#rerr').textContent=error.message;return}
+      if(savedId)await sb.from('wt_saved_meals').update({last_used:row.date}).eq('id',savedId);
       ov.remove();toast('Added');MDAY=row.date;renderMeals()};
   }
   draw();
@@ -1377,6 +1460,17 @@ async function estimateNutrition(payload){
     if(data&&data.error)return {error:data.error};return data||{error:'No reply'}}
   catch(e){return {error:e.message||'Request failed'}}
 }
+// ---- ⭐ My meals: keep a meal you eat often (per-serving numbers + item breakdown) ----
+async function saveToMyMeals(m){
+  if(!m)return false;
+  const name=(m.custom_name||(m.recipes&&m.recipes.name)||m.name||'').trim();if(!name){toast('Give it a name first');return false}
+  const n=rnOf(m),pick=k=>m[k]!=null?+m[k]:(n&&n[k]!=null?+n[k]:null);
+  const {data:ex}=await sb.from('wt_saved_meals').select('id').ilike('name',name).limit(1);
+  if(ex&&ex.length){toast('Already in My meals');return false}
+  const {error}=await sb.from('wt_saved_meals').insert({name,recipe_id:m.recipe_id||null,servings:+m.servings||1,calories:pick('calories'),protein_g:pick('protein_g'),
+    carbs_g:pick('carbs_g'),fat_g:pick('fat_g'),notes:m.recipe_id?null:(m.notes||null),slot:m.slot||null,last_used:m.date||null});
+  if(error){toast(error.message);return false}toast('⭐ Saved to My meals');return true;
+}
 // ---- edit / delete an entry ----
 async function openMeal(id){
   const {data:m,error}=await sb.from('wt_meal_plan').select(RSEL).eq('id',id).single();
@@ -1394,6 +1488,7 @@ async function openMeal(id){
     <div class="row" style="margin-bottom:14px"><div style="flex:1"><label class="fld">Date</label><input id="ed" type="date" value="${m.date}"></div>
       <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:14px;margin-top:18px"><input type="checkbox" id="eeat" ${m.eaten?'checked':''} style="width:auto"> Eaten</label></div>
     <button class="btn" id="esave">Save</button>
+    <button class="btn sec" id="estar" style="margin-top:8px">⭐ Save to My meals</button>
     <button class="btn danger" id="edel" style="margin-top:8px">Delete</button>
     <div id="eerr" style="color:var(--bad);font-size:13px;margin-top:8px;min-height:14px"></div></div>`;
   document.body.appendChild(ov);const $q=s=>ov.querySelector(s);
@@ -1416,6 +1511,7 @@ async function openMeal(id){
     if(m.recipe_id&&n){for(const k of ['calories','protein_g','carbs_g','fat_g'])if(upd[k]!=null&&n[k]!=null&&Math.round(upd[k])===Math.round(n[k]))upd[k]=null}
     const {error}=await sb.from('wt_meal_plan').update(upd).eq('id',id);if(error){$q('#eerr').textContent=error.message;return}
     ov.remove();toast('Saved');MDAY=upd.date;renderMeals()};
+  $q('#estar').onclick=async()=>{if(await saveToMyMeals({...m,notes:m.recipe_id?null:(eitems.length?JSON.stringify(eitems):m.notes)})){$q('#estar').textContent='⭐ In My meals';$q('#estar').disabled=true}};
   $q('#edel').onclick=async()=>{const {error}=await sb.from('wt_meal_plan').delete().eq('id',id);if(error){$q('#eerr').textContent=error.message;return}ov.remove();toast('Deleted');renderMeals()};
 }
 
