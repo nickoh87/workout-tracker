@@ -1029,7 +1029,7 @@ const itemSum=items=>{const t={calories:0,protein_g:0,carbs_g:0,fat_g:0};(items|
 // editable item list; calls onChange(totals) whenever an item changes
 // extra nutrients per item (from the AI breakdown); dv = Canadian % Daily Value reference; lim = nutrient to limit
 const NUTR=[['Other',[['fiber_g','Fibre','g',28],['sugar_g','Sugars','g',100,1],['sat_fat_g','Saturated fat','g',20,1],['cholesterol_mg','Cholesterol','mg',300,1],['sodium_mg','Sodium','mg',2300,1]]],
-  ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['magnesium_mg','Magnesium','mg',420,0,1],
+  ['Vitamins & minerals',[['potassium_mg','Potassium','mg',3400],['calcium_mg','Calcium','mg',1300],['iron_mg','Iron','mg',18],['magnesium_mg','Magnesium','mg',420,0,1],['zinc_mg','Zinc','mg',11,0,1],
     ['vit_a_mcg','Vitamin A','mcg',900],['thiamin_mg','Thiamine (B1)','mg',1.2,0,1],['riboflavin_mg','Riboflavin (B2)','mg',1.3,0,1],['niacin_mg','Niacin (B3)','mg',16,0,1],
     ['pantothenic_mg','Pantothenic acid (B5)','mg',5,0,1],['vit_b6_mg','Vitamin B6','mg',1.7,0,1],['vit_b12_mcg','Vitamin B12','mcg',2.4],['folate_mcg','Folate','mcg',400,0,1],
     ['biotin_mcg','Biotin','mcg',30,0,1],['vit_c_mg','Vitamin C','mg',90],['vit_d_mcg','Vitamin D','mcg',20],['vit_e_mg','Vitamin E','mg',15,0,1],['vit_k_mcg','Vitamin K','mcg',120,0,1],
@@ -1042,8 +1042,9 @@ function nutrFacts(items,OPEN){
   return `<table class="nft">${NUTR.map(([grp,list])=>`<tr><th>${grp}</th><th>Amount</th><th>% Daily</th></tr>`+list.filter(n=>!n[5]||tot(n[0])>0).map(([k,lab,u,dv,lim])=>{const v=tot(k),pc=dv?Math.round(v/dv*100):0;
     const op=OPEN&&OPEN.has(k);
     // who contributed: items sorted by amount, with share of the meal total and % of daily value
-    const contrib=(items||[]).map(it=>({n:it.name||'Item',q:it.qty||'',v:+it[k]||0})).sort((a,b)=>b.v-a.v);
-    const det=contrib.map(c=>`<tr><td>${esc(c.n)}${c.q?`<small>${esc(c.q)}</small>`:''}</td><td>${fv(c.v)} ${u}</td><td class="sh">${v?Math.round(c.v/v*100):0}%</td><td class="sh">${dv?Math.round(c.v/dv*100)+'% DV':'–'}</td></tr>`).join('');
+    // only the foods/pills that actually have some (rows that would show 0 are left out)
+    const contrib=(items||[]).map(it=>({n:it.name||'Item',q:it.qty||'',v:+it[k]||0})).filter(c=>c.v>=0.05).sort((a,b)=>b.v-a.v);
+    const det=!contrib.length?`<tr><td colspan="4" style="color:var(--mut2)">None today</td></tr>`:contrib.map(c=>`<tr><td>${esc(c.n)}${c.q?`<small>${esc(c.q)}</small>`:''}</td><td>${fv(c.v)} ${u}</td><td class="sh">${v?Math.round(c.v/v*100):0}%</td><td class="sh">${dv?Math.round(c.v/dv*100)+'% DV':'–'}</td></tr>`).join('');
     return `<tr class="nrow${op?' open':''}" data-nk="${k}"><td>${lab}</td><td>${fv(v)} ${u}</td><td class="dv">${dv?pc+'%':'–'}<span class="bar"><i class="${lim&&pc>=30?'hi':''}" style="width:${Math.min(100,pc)}%"></i></span></td></tr>
       <tr class="ndet${op?'':' hide'}"><td colspan="3"><table class="ndt"><tr><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">From</td><td style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Amount</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Share</td><td class="sh" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2)">Daily</td></tr>${det}</table></td></tr>`}).join('')).join('')}</table>`;
 }
@@ -1204,7 +1205,7 @@ async function editPill(id){
 }
 // fill in vitamins/minerals automatically for any meal on the day that doesn't have them yet
 async function backfillDay(list){
-  const todo=list.filter(r=>!BF.has(r.id)&&!hasMicros(parseItems(r)));
+  const todo=list.filter(r=>{if(BF.has(r.id))return false;const it=parseItems(r);return !hasMicros(it)||it.every(x=>x.magnesium_mg==null)});
   if(!todo.length)return;todo.forEach(r=>BF.add(r.id));
   const day=MDAY;
   await Promise.all(todo.map(r=>fillMicros(r).catch(()=>{})));
@@ -1215,7 +1216,11 @@ async function fillMicros(r){
   const ni=res&&res.estimate&&res.estimate.items;if(!Array.isArray(ni)||!ni.length)return;
   const old=parseItems(r);let items=ni;
   // keep any breakdown you already have (and edited); just add the vitamin numbers to it
-  if(old&&old.length===ni.length)items=old.map((o,i)=>{const x={...o};NUTR.forEach(g=>g[1].forEach(n=>{x[n[0]]=ni[i][n[0]]}));return x});
+  const fill=(o,src)=>{const x={...o};NUTR.forEach(g=>g[1].forEach(n=>{if(x[n[0]]==null)x[n[0]]=src?(+src[n[0]]||0):0}));return x};
+  const norm=t=>String(t||'').toLowerCase().replace(/[^a-z]/g,'');
+  if(old&&old.length===ni.length)items=old.map((o,i)=>fill(o,ni[i]));
+  // different item count but you already had a breakdown: keep yours, match the new numbers by food name
+  else if(old&&hasMicros(old))items=old.map(o=>fill(o,ni.find(n=>norm(n.name)===norm(o.name)||norm(n.name).includes(norm(o.name))||norm(o.name).includes(norm(n.name)))));
   const upd={notes:JSON.stringify(items)};
   if(!r.recipe_id&&r.calories==null){const t=itemSum(items);Object.assign(upd,{calories:Math.round(t.calories),protein_g:Math.round(t.protein_g),carbs_g:Math.round(t.carbs_g),fat_g:Math.round(t.fat_g)})}
   await sb.from('wt_meal_plan').update(upd).eq('id',r.id);
@@ -1239,13 +1244,40 @@ async function addMeal(slot){
   ov.innerHTML=`<div class="sheet">
     <div class="row sp" style="margin-bottom:10px"><div style="font-size:17px;font-weight:750">Add to ${SLOTS.find(s=>s[0]===slot)[1]}</div>
       <select id="mslot" style="width:auto;padding:8px 10px;font-size:13px">${SLOTS.map(s=>`<option value="${s[0]}" ${s[0]===slot?'selected':''}>${s[1]}</option>`).join('')}</select></div>
-    <div class="seg"><button data-m="recipe" class="on">From my recipes</button><button data-m="custom">Type it in</button></div>
+    <div class="seg"><button data-m="recipe" class="on">From my recipes</button><button data-m="snap">📷 Snap</button><button data-m="custom">Type it in</button></div>
     <div id="mbody"><div class="spin"></div></div></div>`;
   document.body.appendChild(ov);
   const body=ov.querySelector('#mbody');let mode='recipe';
   ov.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{mode=b.dataset.m;ov.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x===b));draw()});
   const curSlot=()=>ov.querySelector('#mslot').value;
-  async function draw(){
+  const setMode=m=>{mode=m;ov.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x.dataset.m===m))};
+  async function draw(pre){
+    if(mode==='snap'){
+      // one camera button: barcode in the photo -> product lookup; otherwise the AI reads the label/package or identifies the food
+      body.innerHTML=`<button class="btn" id="snapcam">📷 Take a photo</button>
+        <button class="btn sec" id="snapgal" style="margin-top:8px">🖼️ Choose from photos</button>
+        <input type="file" id="fcam" accept="image/*" capture="environment" hidden><input type="file" id="fgal" accept="image/*" hidden>
+        <label class="fld" style="margin-top:14px">Note (optional)</label><input id="snote" placeholder="e.g. ate half · 2 servings · 300 g">
+        <div class="muted" style="font-size:12px;margin-top:8px">Snap the barcode, the Nutrition Facts label, the package or the food itself.</div>
+        <div id="sstat" style="margin-top:12px;font-size:13px;min-height:16px"></div>
+        <img id="sprev" alt="" style="display:none;width:100%;max-height:260px;object-fit:contain;border-radius:12px;margin-top:8px;background:var(--bg)">`;
+      const $q=s=>body.querySelector(s);
+      $q('#snapcam').onclick=()=>$q('#fcam').click();$q('#snapgal').onclick=()=>$q('#fgal').click();
+      const busy=on=>{$q('#snapcam').disabled=on;$q('#snapgal').disabled=on};
+      const go=async f=>{if(!f)return;const st=$q('#sstat');st.style.color='';busy(true);
+        try{
+          st.textContent='Preparing photo…';const img=await snapImage(f);$q('#sprev').src=img.url;$q('#sprev').style.display='block';
+          const note=$q('#snote').value.trim();let r=null;
+          st.textContent='Looking for a barcode…';const code=await findBarcode(img.el);
+          if(code){st.textContent=`Barcode ${code} — looking it up…`;r=await estimateNutrition({barcode:code,note});
+            if(r.error){st.textContent=`Barcode ${code} not in the database — reading the photo instead…`;r=null}}
+          if(!r){if(!code)st.textContent='Reading the photo… (10–20 s)';r=await estimateNutrition({image:img.b64,media_type:'image/jpeg',note})}
+          if(r.error){st.style.color='var(--bad)';st.textContent=r.error;busy(false);return}
+          setMode('custom');draw({e:r.estimate,url:img.url});
+        }catch(e){st.style.color='var(--bad)';st.textContent=e.message||'Could not read that photo';busy(false)}};
+      $q('#fcam').onchange=e=>go(e.target.files[0]);$q('#fgal').onchange=e=>go(e.target.files[0]);
+      return;
+    }
     if(mode==='recipe'){
       const recs=await loadRecipes();
       body.innerHTML=`<div class="search"><input id="rq" placeholder="Search ${recs.length} recipes…"></div><div id="rlist"></div>`;
@@ -1269,16 +1301,21 @@ async function addMeal(slot){
           <div style="flex:1"><label class="fld">Date</label><input id="cd" type="date" value="${MDAY}"></div></div>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px"><input type="checkbox" id="ceat" checked style="width:auto"> Already eaten</label>
         <button class="btn" id="csave">Save</button>`;
-      const $q=s=>body.querySelector(s);setTimeout(()=>$q('#ctext').focus(),50);
+      const $q=s=>body.querySelector(s);if(!pre)setTimeout(()=>$q('#ctext').focus(),50);
       let citems=[];
       const setTot=t=>{['#ck','#cp','#cc','#cf'].forEach(id=>$q(id).readOnly=!!t);{const g=$q('#ck').closest('.g4');g.style.display=t?'none':'';if(g.previousElementSibling)g.previousElementSibling.style.display=t?'none':''}if(t){$q('#ck').value=Math.round(t.calories);$q('#cp').value=Math.round(t.protein_g);$q('#cc').value=Math.round(t.carbs_g);$q('#cf').value=Math.round(t.fat_g)}};
+      const apply=e=>{$q('#ck').value=Math.round(e.calories);$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
+        $q('#cnote').textContent=(e.kind==='barcode'?'🔎 From barcode '+(e.barcode||'')+' · ':e.kind==='label'?'🏷️ Read from the label · ':e.kind==='food'?'📷 Estimated from the photo · ':'')+(e.notes||'');
+        // nothing has more than ~9 kcal per gram (pure fat): if it does, the serving size was misread
+        if(e.label&&e.label.serving_g>0&&e.calories/e.label.serving_g>9.2)$q('#cnote').innerHTML=`<span style="color:var(--bad)">⚠️ The serving size looks misread (${Math.round(e.calories)} kcal can't fit in ${e.label.serving_g} g) — check the label and fix the amount.</span> `+esc($q('#cnote').textContent);
+        citems=Array.isArray(e.items)?e.items.map(x=>({...x})):[];itemEditor($q('#citems'),citems,t=>setTot(t))};
       $q('#cest').onclick=async()=>{const t=$q('#ctext').value.trim();if(!t){$q('#cerr').textContent='Type what you ate first.';return}
         const b=$q('#cest');b.disabled=true;b.textContent='Estimating…';$q('#cerr').textContent='';
         const r=await estimateNutrition({text:t});b.disabled=false;b.textContent='🤖 Estimate calories';
         if(r.error){$q('#cerr').textContent=r.error;return}
-        const e=r.estimate;$q('#ck').value=Math.round(e.calories);$q('#cp').value=Math.round(e.protein_g||0);$q('#cc').value=Math.round(e.carbs_g||0);$q('#cf').value=Math.round(e.fat_g||0);
-        $q('#cnote').textContent=e.notes||'';
-        citems=Array.isArray(e.items)?e.items.map(x=>({...x})):[];itemEditor($q('#citems'),citems,t=>setTot(t))};
+        apply(r.estimate)};
+      if(pre&&pre.e){$q('#ctext').value=pre.e.meal_name||'';apply(pre.e);
+        if(pre.url)$q('#ctext').previousElementSibling.insertAdjacentHTML('beforebegin',`<img src="${pre.url}" alt="" style="width:100%;max-height:160px;object-fit:contain;border-radius:12px;margin-bottom:10px;background:var(--bg)">`)}
       $q('#csave').onclick=async()=>{const name=$q('#ctext').value.trim();const kcal=parseFloat($q('#ck').value);
         if(!name){$q('#cerr').textContent='Type what you ate.';return}
         const row={date:$q('#cd').value||MDAY,slot:curSlot(),custom_name:name,servings:parseFloat($q('#cs').value)||1,eaten:$q('#ceat').checked,
@@ -1310,6 +1347,23 @@ async function addMeal(slot){
       ov.remove();toast('Added');MDAY=row.date;renderMeals()};
   }
   draw();
+}
+// ---- 📷 snap: shrink the photo (long edge 1568 px, JPEG) and look for a barcode on the phone first ----
+function snapImage(file){
+  return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();
+    im.onload=()=>{const k=Math.min(1,1568/Math.max(im.naturalWidth,im.naturalHeight));const c=document.createElement('canvas');
+      c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+      const url=c.toDataURL('image/jpeg',0.85);const el=new Image();el.onload=()=>res({url,b64:url.split(',')[1],el});el.onerror=()=>rej(new Error('Could not open that photo'));el.src=url};
+    im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('Could not open that photo'))};im.src=u});
+}
+let ZXP=null;
+const loadZX=()=>ZXP||(ZXP=new Promise((res,rej)=>{if(window.ZXing)return res();const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';s.onload=()=>res();s.onerror=()=>{ZXP=null;rej(new Error('zxing'))};document.head.appendChild(s)}));
+async function findBarcode(el){
+  try{if('BarcodeDetector' in window){const f=await BarcodeDetector.getSupportedFormats();const fm=['ean_13','ean_8','upc_a','upc_e'].filter(x=>f.includes(x));
+    if(fm.length){const r=await new BarcodeDetector({formats:fm}).detect(el);if(r&&r[0])return r[0].rawValue}}}catch(e){}
+  // iPhone Safari has no BarcodeDetector: use ZXing (loaded only when needed)
+  try{await loadZX();const r=await new ZXing.BrowserMultiFormatReader().decodeFromImageElement(el);const t=r&&(r.text||r.getText&&r.getText());if(t&&/^\d{6,14}$/.test(t))return t}catch(e){}
+  return null;
 }
 async function estimateNutrition(payload){
   try{const {data,error}=await sb.functions.invoke('estimate-nutrition',{body:payload});
