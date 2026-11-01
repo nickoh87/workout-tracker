@@ -1140,13 +1140,14 @@ function dayNutrCard(list,pills){
     ${open?`<div class="muted" style="font-size:12px;margin-top:4px">Today's total vs the daily requirement · ${pills.length?'food + pills · ':''}tap a row to see which meal or pill it came from</div>${dn.length?nutrFacts(dn,DAY_OPEN):''}`:''}</div>`;
 }
 // ---- 💊 pills / supplements: wt_supplements (per_unit = amounts in ONE pill, NUTR keys) + wt_supplement_log (per-day override; qty 0 = skipped) ----
-// a pill counts every day from start_date at daily_qty unless that day has a log row
+// a pill only counts on a day you tick it (a wt_supplement_log row with qty>0). Untick = row deleted.
+// The list shows your active pills, plus any stopped pill you logged that day (so old days keep their totals).
 async function loadPills(day){
-  const [a,b]=await Promise.all([sb.from('wt_supplements').select('*').eq('active',true).lte('start_date',day).order('sort').order('id'),
+  const [a,b]=await Promise.all([sb.from('wt_supplements').select('*').order('sort').order('id'),
     sb.from('wt_supplement_log').select('supplement_id,qty').eq('date',day)]);
   if(a.error){console.warn('pills',a.error.message);return []}
   const lg={};(b.data||[]).forEach(r=>lg[r.supplement_id]=+r.qty);
-  return (a.data||[]).map(p=>({...p,qty:lg[p.id]!=null?lg[p.id]:+p.daily_qty,logged:lg[p.id]!=null}));
+  return (a.data||[]).filter(p=>lg[p.id]>0||(p.active&&p.start_date<=day)).map(p=>({...p,qty:lg[p.id]>0?lg[p.id]:0,logged:lg[p.id]>0}));
 }
 const plur=(n,u)=>`${fmt(n)} ${+n===1?u:(/[^aeiou]y$/.test(u)?u.slice(0,-1)+'ies':u+'s')}`;
 function pillItems(PL){
@@ -1154,12 +1155,12 @@ function pillItems(PL){
     for(const k in pu)o[k]=(+pu[k]||0)*p.qty;return o});
 }
 function pillsCard(PL){
-  return `<div class="card slot"><div class="sh"><h2>💊 Pills</h2><span class="skc">${PL.length?PL.filter(p=>p.qty>0).length+' of '+PL.length+' taken':''}</span><button class="btn sec sm" onclick="editPill()">+ Add</button></div>
+  return `<div class="card slot"><div class="sh"><h2>💊 Pills</h2><span class="skc">${PL.length?PL.filter(p=>p.qty>0).length+' of '+PL.length+' taken':''}</span>${PL.some(p=>!p.qty&&p.active)?`<button class="btn sec sm" onclick="takeAllPills()" style="margin-right:6px">✓ All</button>`:''}<button class="btn sec sm" onclick="editPill()">+ Add</button></div>
     ${PL.length?PL.map(p=>`<div class="meal ${p.qty>0?'eaten':''}" onclick="editPill(${p.id})">
       <div class="ck" onclick="event.stopPropagation();togglePill(${p.id},${p.qty>0?0:1})">${p.qty>0?'✓':''}</div>
-      <div class="mn">${esc(p.name)}<small>${p.qty>0?plur(p.qty,p.unit):'skipped'}${p.brand?' · '+esc(p.brand):''}</small></div>
+      <div class="mn">${esc(p.name)}<small>${p.qty>0?plur(p.qty,p.unit)+' taken':plur(p.daily_qty,p.unit)+' a day'}${p.brand?' · '+esc(p.brand):''}${p.active?'':' · stopped'}</small></div>
       <div class="mk">${pillSummary(p)}</div></div>`).join(''):'<div class="muted" style="font-size:13px">No pills yet.</div>'}
-    <div class="muted" style="font-size:12px;margin-top:8px">Pills count every day automatically — tap the circle on a day you skip one.</div></div>`;
+    <div class="muted" style="font-size:12px;margin-top:8px">Tap the circle when you take one — only ticked pills count toward the day.</div></div>`;
 }
 // short "what's in it" for the row: the nutrients when 3 or fewer, else a count
 function pillSummary(p){
@@ -1170,9 +1171,14 @@ function pillSummary(p){
 const fmtN=v=>v>=100?Math.round(v).toLocaleString():Math.round(v*10)/10;
 async function togglePill(id,on){
   const p=(await loadPills(MDAY)).find(x=>x.id===id);if(!p)return;
-  // back to the normal amount = no log row; skipped = qty 0
-  const r=on?await sb.from('wt_supplement_log').delete().eq('date',MDAY).eq('supplement_id',id)
-            :await sb.from('wt_supplement_log').upsert({date:MDAY,supplement_id:id,qty:0},{onConflict:'date,supplement_id'});
+  // taken = log row at your usual amount; untick = no row
+  const r=on?await sb.from('wt_supplement_log').upsert({date:MDAY,supplement_id:id,qty:+p.daily_qty||1},{onConflict:'date,supplement_id'})
+            :await sb.from('wt_supplement_log').delete().eq('date',MDAY).eq('supplement_id',id);
+  if(r.error)toast(r.error.message);renderMeals();
+}
+async function takeAllPills(){
+  const rows=(await loadPills(MDAY)).filter(p=>!p.qty&&p.active).map(p=>({date:MDAY,supplement_id:p.id,qty:+p.daily_qty||1}));
+  if(!rows.length)return;const r=await sb.from('wt_supplement_log').upsert(rows,{onConflict:'date,supplement_id'});
   if(r.error)toast(r.error.message);renderMeals();
 }
 async function editPill(id){
