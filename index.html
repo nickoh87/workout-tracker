@@ -401,13 +401,14 @@ async function renderToday(){
     <div class="page"><div class="spin"></div></div>`;
   const sinceW=new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   const since30=new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
-  const [{data:wks},{data:wmeta},{data:weighs},{count:total},{data:meals},{data:teeth}]=await Promise.all([
+  const [{data:wks},{data:wmeta},{data:weighs},{count:total},{data:meals},{data:teeth},{data:water}]=await Promise.all([
     sb.from('wt_workouts').select('id,date,name,kind').order('date',{ascending:false}).order('id',{ascending:false}).limit(60),
     sb.from('wt_sets').select('weight,reps,wt_workouts!inner(date)').gte('wt_workouts.date',since30),
     sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60),
     sb.from('wt_workouts').select('*',{count:'exact',head:true}).neq('kind','quick'),
     sb.from('wt_meal_plan').select(RSEL).eq('date',todayISO()),
-    sb.from('wt_teeth').select('date,am,pm').eq('date',todayISO()).maybeSingle()
+    sb.from('wt_teeth').select('date,am,pm').eq('date',todayISO()).maybeSingle(),
+    sb.from('wt_water').select('id,ml,created_at').eq('date',todayISO()).order('id')
   ]);
   let mk=0,me=0,mp=0;(meals||[]).forEach(r=>{const v=mealVals(r);mk+=v.kcal;mp+=v.p;if(r.eaten)me+=v.kcal});const tgt=kcalTarget();
   const real=(wks||[]).filter(w=>w.kind!=='quick');
@@ -423,6 +424,7 @@ async function renderToday(){
   <div class="page">
     ${isStandalone()?'':`<button class="btn sec" onclick="installApp()" style="margin:0 0 14px">📲 Save as an app</button>`}
     <div class="card"><h2 style="margin:0">🪥 Brush teeth</h2>${teethBox(todayISO(),teeth)}</div>
+    ${waterCard(water||[])}
     <div class="card cal" id="cal"><div class="spin" style="margin:20px auto"></div></div>
     <div class="grid2">
       <div class="stat"><div class="n">${weekCount}</div><div class="l">Workouts this week</div></div>
@@ -1154,7 +1156,7 @@ const fmtL=ml=>(Math.round(ml/50)*50/1000).toLocaleString(undefined,{maximumFrac
 function waterCard(list){
   const tot=list.reduce((a,r)=>a+(+r.ml||0),0),g=waterGoal(),pct=Math.min(100,Math.round(tot/g*100));
   const last=list.length?new Date(list[list.length-1].created_at).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
-  return `<div class="card"><div class="row sp"><div><span style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">💧 Water</span>
+  return `<div class="card" id="wcard"><div class="row sp"><div><span style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)">💧 Water</span>
       <div style="margin-top:4px"><span style="font-size:24px;font-weight:750">${fmtL(tot)}</span><span style="font-size:13px;color:var(--mut)"> / ${fmtL(g)}</span></div></div>
       <div class="muted" style="font-size:12px;text-align:right;cursor:pointer" onclick="setWaterGoal()">${tot>=g?'✓ goal reached':fmtL(g-tot)+' to go'}<br><span style="text-decoration:underline">🎯 goal</span></div></div>
     <div class="kbar water"><div style="width:${pct}%"></div></div>
@@ -1164,11 +1166,18 @@ function waterCard(list){
       <button class="btn sec" onclick="otherWater()">+ Other</button>
       ${list.length?`<button class="btn ghost" onclick="undoWater(${list[list.length-1].id})" title="Remove the last drink" style="flex:0 0 auto;padding:9px 12px">↶</button>`:''}</div></div>`;
 }
-async function addWater(ml){
-  const {error}=await sb.from('wt_water').insert({date:MDAY,ml});if(error)return toast(error.message);
-  toast('💧 +'+ml+' ml');renderMeals();
+// water card lives on Today (always today's date) and on Meals (the viewed MDAY)
+const waterDay=()=>TAB==='today'?todayISO():MDAY;
+async function refreshWater(){
+  if(TAB!=='today')return renderMeals();
+  const {data}=await sb.from('wt_water').select('id,ml,created_at').eq('date',todayISO()).order('id');
+  const el=document.getElementById('wcard');if(el)el.outerHTML=waterCard(data||[]);
 }
-async function undoWater(id){const {error}=await sb.from('wt_water').delete().eq('id',id);if(error)return toast(error.message);toast('Removed');renderMeals()}
+async function addWater(ml){
+  const {error}=await sb.from('wt_water').insert({date:waterDay(),ml});if(error)return toast(error.message);
+  toast('💧 +'+ml+' ml');refreshWater();
+}
+async function undoWater(id){const {error}=await sb.from('wt_water').delete().eq('id',id);if(error)return toast(error.message);toast('Removed');refreshWater()}
 function otherWater(){
   const ov=document.createElement('div');ov.className='ovr';ov.onclick=e=>{if(e.target===ov)ov.remove()};
   ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:14px">💧 Add water</div>
@@ -1185,7 +1194,7 @@ function setWaterGoal(){
     <div class="muted" style="font-size:12px;margin-bottom:12px">In litres. 3 L is a common target for drinks; more on workout days.</div>
     <input id="wg" inputmode="decimal" value="${waterGoal()/1000}" style="margin-bottom:12px"><button class="btn" id="wgs">Save</button></div>`;
   document.body.appendChild(ov);const inp=ov.querySelector('#wg');setTimeout(()=>inp.focus(),50);
-  ov.querySelector('#wgs').onclick=()=>{const v=parseFloat(inp.value);if(v>0&&v<10){try{localStorage.setItem('wt_water_goal',Math.round(v*1000))}catch(e){}}ov.remove();renderMeals()};
+  ov.querySelector('#wgs').onclick=()=>{const v=parseFloat(inp.value);if(v>0&&v<10){try{localStorage.setItem('wt_water_goal',Math.round(v*1000))}catch(e){}}ov.remove();refreshWater()};
 }
 // ---- day vitamins & minerals vs daily requirement ----
 const DAY_OPEN=new Set(),BF=new Set();
