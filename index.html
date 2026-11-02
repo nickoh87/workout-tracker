@@ -82,7 +82,12 @@
   .cal .cd .kc{font-size:9.5px;color:var(--mut);line-height:1;font-variant-numeric:tabular-nums}
   .cal .lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--mut);margin-top:10px}
   .cal .lg i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
-  .c-w{background:var(--acc)}.c-q{background:var(--warn)}.c-m{background:var(--good)}.c-b{background:#c78bff}
+  .c-w{background:var(--acc)}.c-q{background:var(--warn)}.c-m{background:var(--good)}.c-b{background:#c78bff}.c-t{background:#2dd4d4}
+  .teeth{display:flex;gap:10px;margin-top:10px}
+  .teeth .tb{flex:1;display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;color:var(--txt);font:inherit;font-weight:650;font-size:15px;cursor:pointer;text-align:left}
+  .teeth .tb .tk{width:24px;height:24px;border-radius:7px;border:2px solid var(--mut2);display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto}
+  .teeth .tb.on{border-color:#2dd4d4}.teeth .tb.on .tk{background:#2dd4d4;border-color:#2dd4d4;color:#0b0f17}
+  .teeth .tb small{display:block;font-size:11px;font-weight:500;color:var(--mut)}
   nav button{flex:1;background:none;color:var(--mut2);display:flex;flex-direction:column;align-items:center;
     gap:3px;font-size:11px;font-weight:600;padding:5px 0}
   nav button.on{color:var(--acc)}
@@ -338,25 +343,27 @@ async function renderCal(){
   const [y,m]=CALM.split('-').map(Number);
   const first=new Date(y,m-1,1),dow=(first.getDay()+6)%7;           // Monday-first
   const start=addDays(first.toLocaleDateString('en-CA'),-dow),end=addDays(start,41);
-  const [{data:wks},{data:meals},{data:wis}]=await Promise.all([
+  const [{data:wks},{data:meals},{data:wis},{data:tth}]=await Promise.all([
     sb.from('wt_workouts').select('id,date,name,kind').gte('date',start).lte('date',end),
     sb.from('wt_meal_plan').select(RSEL).gte('date',start).lte('date',end),
-    sb.from('wt_weigh_ins').select('date,weight').gte('date',start).lte('date',end)]);
+    sb.from('wt_weigh_ins').select('date,weight').gte('date',start).lte('date',end),
+    sb.from('wt_teeth').select('date,am,pm').gte('date',start).lte('date',end)]);
   const D={};const g=d=>D[d]=D[d]||{w:[],q:[],kcal:0,meals:0,wt:null};
   (wks||[]).forEach(w=>g(w.date)[w.kind==='quick'?'q':'w'].push(w));
   (meals||[]).forEach(r=>{const x=g(r.date);x.kcal+=mealVals(r).kcal;x.meals++});
   (wis||[]).forEach(r=>g(r.date).wt=r.weight);
+  (tth||[]).forEach(r=>g(r.date).th=r);
   CALDATA=D;
   const today=todayISO();let cells='';
   for(let i=0;i<42;i++){const d=addDays(start,i);const x=D[d]||{};const out=d.slice(0,7)!==CALM;
     if(i===35&&out)break; // drop an all-next-month last row
     cells+=`<button class="cd${out?' out':''}${d===today?' today':''}" onclick="calDay('${d}')"><span class="dn">${+d.slice(8)}</span>
-      <span class="dots">${x.w&&x.w.length?'<i class="c-w"></i>':''}${x.q&&x.q.length?'<i class="c-q"></i>':''}${x.meals?'<i class="c-m"></i>':''}${x.wt?'<i class="c-b"></i>':''}</span>
+      <span class="dots">${x.w&&x.w.length?'<i class="c-w"></i>':''}${x.q&&x.q.length?'<i class="c-q"></i>':''}${x.meals?'<i class="c-m"></i>':''}${x.wt?'<i class="c-b"></i>':''}${x.th&&x.th.am&&x.th.pm?'<i class="c-t"></i>':''}</span>
       <span class="kc">${x.kcal?Math.round(x.kcal):''}</span></button>`}
   const mname=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
   el.innerHTML=`<div class="cnav"><button onclick="calMove(-1)">‹</button><div class="ct">${mname}</div><button onclick="calMove(1)">›</button></div>
     <div class="cg">${['M','T','W','T','F','S','S'].map(w=>`<div class="dw">${w}</div>`).join('')}${cells}</div>
-    <div class="lg"><span><i class="c-w"></i>Workout</span><span><i class="c-q"></i>Quick log</span><span><i class="c-m"></i>Meals (kcal under date)</span><span><i class="c-b"></i>Weigh-in</span></div>`;
+    <div class="lg"><span><i class="c-w"></i>Workout</span><span><i class="c-q"></i>Quick log</span><span><i class="c-m"></i>Meals (kcal under date)</span><span><i class="c-b"></i>Weigh-in</span><span><i class="c-t"></i>Teeth AM+PM</span></div>`;
 }
 function calMove(n){const [y,m]=CALM.split('-').map(Number);const d=new Date(y,m-1+n,1);CALM=d.toLocaleDateString('en-CA').slice(0,7);renderCal()}
 function calDay(d){
@@ -368,6 +375,7 @@ function calDay(d){
     x.wt?`<div class="exopt"><span><i class="c-b" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px"></i>Weigh-in</span><span>${fmt(x.wt)} lb</span></div>`:''].filter(Boolean);
   ov.innerHTML=`<div class="sheet"><div style="font-size:17px;font-weight:750;margin-bottom:10px">${niceDate(d)} <span class="muted" style="font-weight:500;font-size:13px">${niceDateY(d)}</span></div>
     ${rows.length?rows.join(''):'<div class="muted" style="padding:10px 0">Nothing logged this day.</div>'}
+    <div style="margin-top:12px;font-size:13px;font-weight:700;color:var(--mut)">🪥 Brush teeth</div>${teethBox(d,x.th)}
     <div class="row" style="gap:8px;margin-top:14px"><button class="btn sec" id="cdm">+ Meal</button><button class="btn sec" id="cdq">⚡ Quick log</button></div></div>`;
   document.body.appendChild(ov);
   ov.querySelectorAll('[data-w]').forEach(r=>r.onclick=()=>{ov.remove();openWorkout(+r.dataset.w)});
@@ -376,17 +384,30 @@ function calDay(d){
   ov.querySelector('#cdm').onclick=goMeals;
   ov.querySelector('#cdq').onclick=()=>{ov.remove();quickLog(d)};
 }
+// ---- 🪥 teeth: wt_teeth (date pk, am/pm = when ticked, null = not done) ----
+function teethBox(d,t){t=t||{};
+  const b=(k,lab)=>{const v=t[k];const tm=v&&new Date(v).toLocaleDateString('en-CA')===d?new Date(v).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+    return `<button class="tb${v?' on':''}" onclick="event.stopPropagation();toggleTeeth('${d}','${k}',${!v},this)"><span class="tk">${v?'✓':''}</span><span>${lab}${tm?`<small>${tm}</small>`:''}</span></button>`};
+  return `<div class="teeth">${b('am','☀️ AM')}${b('pm','🌙 PM')}</div>`}
+async function toggleTeeth(d,k,on,btn){
+  const {data,error}=await sb.from('wt_teeth').upsert({date:d,[k]:on?new Date().toISOString():null,updated_at:new Date().toISOString()},{onConflict:'date'}).select('date,am,pm').single();
+  if(error)return toast(error.message);
+  const box=btn&&btn.closest('.teeth');if(box)box.outerHTML=teethBox(d,data);
+  if(on)toast('🪥 '+k.toUpperCase()+' done');
+  if($('#cal'))renderCal();
+}
 async function renderToday(){
   app.innerHTML=`<header><div><h1>Today</h1><div class="sub">${niceDateY(todayISO())}</div></div></header>
     <div class="page"><div class="spin"></div></div>`;
   const sinceW=new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   const since30=new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
-  const [{data:wks},{data:wmeta},{data:weighs},{count:total},{data:meals}]=await Promise.all([
+  const [{data:wks},{data:wmeta},{data:weighs},{count:total},{data:meals},{data:teeth}]=await Promise.all([
     sb.from('wt_workouts').select('id,date,name,kind').order('date',{ascending:false}).order('id',{ascending:false}).limit(60),
     sb.from('wt_sets').select('weight,reps,wt_workouts!inner(date)').gte('wt_workouts.date',since30),
     sb.from('wt_weigh_ins').select('date,weight').order('date',{ascending:false}).limit(60),
     sb.from('wt_workouts').select('*',{count:'exact',head:true}).neq('kind','quick'),
-    sb.from('wt_meal_plan').select(RSEL).eq('date',todayISO())
+    sb.from('wt_meal_plan').select(RSEL).eq('date',todayISO()),
+    sb.from('wt_teeth').select('date,am,pm').eq('date',todayISO()).maybeSingle()
   ]);
   let mk=0,me=0,mp=0;(meals||[]).forEach(r=>{const v=mealVals(r);mk+=v.kcal;mp+=v.p;if(r.eaten)me+=v.kcal});const tgt=kcalTarget();
   const real=(wks||[]).filter(w=>w.kind!=='quick');
@@ -401,6 +422,7 @@ async function renderToday(){
     <button class="btn ghost sm" onclick="lock()" title="Lock">🔒</button></header>
   <div class="page">
     ${isStandalone()?'':`<button class="btn sec" onclick="installApp()" style="margin:0 0 14px">📲 Save as an app</button>`}
+    <div class="card"><h2 style="margin:0">🪥 Brush teeth</h2>${teethBox(todayISO(),teeth)}</div>
     <div class="card cal" id="cal"><div class="spin" style="margin:20px auto"></div></div>
     <div class="grid2">
       <div class="stat"><div class="n">${weekCount}</div><div class="l">Workouts this week</div></div>
