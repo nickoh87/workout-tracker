@@ -1230,12 +1230,12 @@ function pillItems(PL){
     for(const k in pu)o[k]=(+pu[k]||0)*p.qty;return o});
 }
 function pillsCard(PL){
-  return `<div class="card slot"><div class="sh"><h2>💊 Pills</h2><span class="skc">${PL.length?PL.filter(p=>p.qty>0).length+' of '+PL.length+' taken':''}</span>${PL.some(p=>!p.qty&&p.active)?`<button class="btn sec sm" onclick="takeAllPills()" style="margin-right:6px">✓ All</button>`:''}<button class="btn sec sm" onclick="editPill()">+ Add</button></div>
+  return `<div class="card slot"><div class="sh"><h2>💊 Pills</h2><span class="skc">${PL.length?PL.filter(p=>p.qty>0).length+' of '+PL.length+' taken':''}</span>${PL.some(p=>!p.qty&&p.active&&!p.as_needed)?`<button class="btn sec sm" onclick="takeAllPills()" style="margin-right:6px">✓ All</button>`:''}<button class="btn sec sm" onclick="editPill()">+ Add</button></div>
     ${PL.length?PL.map(p=>`<div class="meal ${p.qty>0?'eaten':''}" onclick="editPill(${p.id})">
       <div class="ck" onclick="event.stopPropagation();togglePill(${p.id},${p.qty>0?0:1})">${p.qty>0?'✓':''}</div>
-      <div class="mn">${esc(p.name)}<small>${p.qty>0?plur(p.qty,p.unit)+' taken':plur(p.daily_qty,p.unit)+' a day'}${p.brand?' · '+esc(p.brand):''}${p.active?'':' · stopped'}</small></div>
+      <div class="mn">${esc(p.name)}<small>${p.qty>0?plur(p.qty,p.unit)+' taken':plur(p.daily_qty,p.unit)+(p.as_needed?' when needed':' a day')}${p.brand?' · '+esc(p.brand):''}${p.active?'':' · stopped'}</small></div>
       <div class="mk">${pillSummary(p)}</div></div>`).join(''):'<div class="muted" style="font-size:13px">No pills yet.</div>'}
-    <div class="muted" style="font-size:12px;margin-top:8px">Tap the circle when you take one — only ticked pills count toward the day.</div></div>`;
+    <div class="muted" style="font-size:12px;margin-top:8px">Tap the circle when you take one — only ticked pills count toward the day. ✓ All skips the ‘when needed’ ones.</div></div>`;
 }
 // short "what's in it" for the row: the nutrients when 3 or fewer, else a count
 function pillSummary(p){
@@ -1252,7 +1252,7 @@ async function togglePill(id,on){
   if(r.error)toast(r.error.message);renderMeals();
 }
 async function takeAllPills(){
-  const rows=(await loadPills(MDAY)).filter(p=>!p.qty&&p.active).map(p=>({date:MDAY,supplement_id:p.id,qty:+p.daily_qty||1}));
+  const rows=(await loadPills(MDAY)).filter(p=>!p.qty&&p.active&&!p.as_needed).map(p=>({date:MDAY,supplement_id:p.id,qty:+p.daily_qty||1}));
   if(!rows.length)return;const r=await sb.from('wt_supplement_log').upsert(rows,{onConflict:'date,supplement_id'});
   if(r.error)toast(r.error.message);renderMeals();
 }
@@ -1368,16 +1368,15 @@ async function addMeal(slot){
     }
     if(mode==='snap'){
       // one camera button: barcode in the photo -> product lookup; otherwise the AI reads the label/package or identifies the food
-      body.innerHTML=`<button class="btn" id="snapcam">📷 Take a photo</button>
-        <button class="btn sec" id="snapgal" style="margin-top:8px">🖼️ Choose from photos</button>
-        <input type="file" id="fcam" accept="image/*" capture="environment" hidden><input type="file" id="fgal" accept="image/*" hidden>
+      const fh='position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none';
+      body.innerHTML=`<label class="btn" id="snapcam" style="display:block;text-align:center;cursor:pointer">📷 Take a photo<input type="file" id="fcam" accept="image/*" capture="environment" style="${fh}"></label>
+        <label class="btn sec" id="snapgal" style="display:block;text-align:center;cursor:pointer;margin-top:8px">🖼️ Choose from photos<input type="file" id="fgal" accept="image/*" style="${fh}"></label>
         <label class="fld" style="margin-top:14px">Note (optional)</label><input id="snote" placeholder="e.g. ate half · 2 servings · 300 g">
         <div class="muted" style="font-size:12px;margin-top:8px">Snap the barcode, the Nutrition Facts label, the package or the food itself.</div>
         <div id="sstat" style="margin-top:12px;font-size:13px;min-height:16px"></div>
         <img id="sprev" alt="" style="display:none;width:100%;max-height:260px;object-fit:contain;border-radius:12px;margin-top:8px;background:var(--bg)">`;
       const $q=s=>body.querySelector(s);
-      $q('#snapcam').onclick=()=>$q('#fcam').click();$q('#snapgal').onclick=()=>$q('#fgal').click();
-      const busy=on=>{$q('#snapcam').disabled=on;$q('#snapgal').disabled=on};
+      const busy=on=>{['#snapcam','#snapgal'].forEach(k=>{const el=$q(k);el.style.pointerEvents=on?'none':'';el.style.opacity=on?.5:''})};
       const go=async f=>{if(!f)return;const st=$q('#sstat');st.style.color='';busy(true);
         try{
           st.textContent='Preparing photo…';const img=await snapImage(f);$q('#sprev').src=img.url;$q('#sprev').style.display='block';
